@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+src/renderer/dist/
+.bin-tmp/
+
+# Bundled native tools (fetched via scripts/fetch-binaries.mjs; ffmpeg.exe > 100MB)
+bin/ffmpeg.exe
+bin/yt-dlp.exe
+
+# Runtime/user data (models cache, downloads, settings, stem cache, projects)
+data/
+
+# Misc
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://i.ytimg.com; media-src 'self' blob: data: file: https://*.googlevideo.com; connect-src 'self'; worker-src 'self' blob:;" />
+  <title>Practice Player</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>Practice Player</h1>
+    <span id="songName" class="song-name">nessun brano</span>
+    <span id="updateInfo" class="update-info" style="display:none"></span>
+    <button id="updateBtn" class="btn btn-update" style="display:none">⟳ Riavvia e aggiorna</button>
+    <span id="status" class="status">avvio…</span>
+  </header>
+
+  <main class="content">
+    <!-- Toolbar: file · youtube · export -->
+    <div class="toolbar">
+      <div class="tb-group">
+        <button id="openBtn" class="btn">📂 Apri brano</button>
+        <button id="openProjectBtn" class="btn">📦 Apri progetto</button>
+        <button id="saveProjectBtn" class="btn" disabled>💾 Salva progetto</button>
+      </div>
+      <div class="tb-group yt">
+        <input id="ytUrl" type="text" placeholder="Cerca un brano o incolla un link YouTube…" spellcheck="false" />
+        <button id="ytBtn" class="btn">🔎 Cerca</button>
+      </div>
+      <div class="tb-group export-group">
+        <span class="tb-label">Esporta:</span>
+        <button id="exportMp3Btn" class="btn" disabled title="Esporta audio MP3 con le modifiche applicate">⬇ MP3</button>
+        <button id="exportMp4Btn" class="btn" disabled title="Esporta audio + video con le modifiche applicate">⬇ MP4</button>
+      </div>
+    </div>
+
+    <!-- YouTube download progress -->
+    <div id="ytProgress" class="dl-progress" style="display:none">
+      <div class="sp-track"><div id="ytBar" class="sp-fill"></div></div>
+      <div id="ytProgressText" class="sp-text"></div>
+    </div>
+
+    <!-- YouTube search results -->
+    <div id="ytResults" class="yt-results" style="display:none"></div>
+
+    <!-- Transport: video, waveform, controls -->
+    <section id="transport" class="transport">
+      <div id="videoWrap" class="video-wrap" style="display:none">
+        <video id="videoEl" class="video" muted playsinline preload="auto"></video>
+        <button id="videoExpand" class="btn video-expand" title="Ingrandisci video (schermo intero)">⛶</button>
+      </div>
+      <canvas id="waveform" class="waveform"></canvas>
+      <div class="controls">
+        <button id="playBtn" class="btn btn-play" title="Play/Pausa (Spazio)">▶</button>
+        <span class="time"><span id="curTime">0:00.00</span> / <span id="durTime">0:00.00</span></span>
+        <div class="volbar">
+          <span class="vol-icon" title="Volume">🔊</span>
+          <input id="volSlider" type="range" min="0" max="300" step="1" value="100" title="Volume" />
+          <span id="volVal" class="vol-val">100%</span>
+          <button id="volReset" class="btn" title="Riporta il volume a 100%">100%</button>
+          <button id="normBtn" class="btn" title="Normalizza ora questo brano a un livello costante">Norm</button>
+          <button id="autoNormBtn" class="btn" title="Normalizza automaticamente ogni brano al caricamento">Auto</button>
+        </div>
+        <div class="loopbar">
+          <button id="setA" class="btn" title="Imposta inizio loop">A</button>
+          <button id="setB" class="btn" title="Imposta fine loop">B</button>
+          <button id="loopToggle" class="btn" title="Attiva/disattiva loop">↻ Loop</button>
+          <button id="loopClear" class="btn btn-ghost" title="Cancella loop">✕</button>
+          <span id="loopInfo" class="loop-info"></span>
+          <button id="addMarker" class="btn" title="Aggiungi segnaposto (M)">＋ Marker</button>
+        </div>
+      </div>
+      <div id="markerList" class="marker-list"></div>
+    </section>
+
+    <!-- Control panels -->
+    <div class="panel-grid">
+      <div class="panel">
+        <div class="panel-title">Tonalità</div>
+        <div class="stepper">
+          <button id="pitchDown" class="btn">− ½ tono</button>
+          <div class="value"><span id="pitchVal">0</span><small>semitoni</small></div>
+          <button id="pitchUp" class="btn">+ ½ tono</button>
+          <button id="pitchReset" class="btn" title="Riporta alla tonalità originale del brano (nessuna trasposizione né correzione)">↺ Originale</button>
+        </div>
+        <div class="tuning">
+          <span class="tuning-label">Intonazione:</span>
+          <span id="tuningVal">—</span>
+          <button id="tuningApply" class="btn btn-ghost" disabled>Applica</button>
+          <button id="tuningAuto" class="btn" title="Rileva e correggi l'intonazione (verso 440 Hz) automaticamente ad ogni brano">Auto</button>
+        </div>
+        <div class="tuning fine-row">
+          <span class="tuning-label">Fine manuale:</span>
+          <button id="fineDown" class="btn mini">−</button>
+          <input id="fineSlider" type="range" min="-50" max="50" step="1" value="0" />
+          <button id="fineUp" class="btn mini">+</button>
+          <span id="fineCents" class="fine-cents">0 cent</span>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Velocità</div>
+        <div class="presets" id="speedPresets">
+          <button class="btn chip" data-speed="0.5">−50%</button>
+          <button class="btn chip" data-speed="0.75">−25%</button>
+          <button class="btn chip" data-speed="0.9">−10%</button>
+          <button class="btn chip" data-speed="0.95">−5%</button>
+          <button class="btn chip" data-speed="1">100%</button>
+          <button class="btn chip" data-speed="1.05">+5%</button>
+          <button class="btn chip" data-speed="1.1">+10%</button>
+        </div>
+        <div class="stepper">
+          <button id="speedDown" class="btn">− 1%</button>
+          <input id="speedSlider" type="range" min="50" max="150" step="1" value="100" />
+          <button id="speedUp" class="btn">+ 1%</button>
+          <div class="value"><span id="speedVal">100</span><small>%</small></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Metronomo <small class="panel-sub">(indipendente dal brano)</small></div>
+        <div class="stepper metro">
+          <button id="metroToggle" class="btn">▶ Click</button>
+          <button id="metroDown" class="btn" title="−1 BPM">−</button>
+          <input id="metroBpm" type="number" min="30" max="300" value="120" class="bpm-input" />
+          <small>BPM</small>
+          <button id="metroUp" class="btn" title="+1 BPM">+</button>
+          <button id="metroHalf" class="btn" title="Dimezza BPM">÷2</button>
+          <button id="metroDouble" class="btn" title="Raddoppia BPM">×2</button>
+          <button id="metroTap" class="btn">TAP</button>
+        </div>
+        <div class="metro-row">
+          <label class="countin">Count-in prima del play
+            <select id="countIn">
+              <option value="0">off</option>
+              <option value="4">1 battuta</option>
+              <option value="8">2 battute</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Accordatore <small class="panel-sub">(tono di riferimento)</small></div>
+        <div class="tuner-mode">
+          <button id="tunerBeep" class="btn mode-btn active" title="Tono continuo">🔔 Beep</button>
+          <button id="tunerPiano" class="btn mode-btn" title="Nota di piano che si ripete">🎹 Piano</button>
+        </div>
+        <div id="tunerKeys" class="tuner-keys"></div>
+        <div class="tuner-row">
+          <span class="tuning-label">Ottava:</span>
+          <button id="octDown" class="btn mini">−</button>
+          <span id="octVal" class="oct-val">4</span>
+          <button id="octUp" class="btn mini">+</button>
+          <button id="tunerStop" class="btn btn-ghost">⏹ Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <section class="panel stem-panel">
+      <div class="panel-title">
+        Tracce separate (stem)
+        <button id="separateBtn" class="btn" style="float:right;margin-top:-4px">🎚 Separa</button>
+      </div>
+      <div id="stemProgress" class="stem-progress" style="display:none">
+        <div class="sp-track"><div id="stemBar" class="sp-fill"></div></div>
+        <div id="stemProgressText" class="sp-text"></div>
+      </div>
+      <div id="stemMixer" class="mixer"></div>
+      <div id="stemHint" class="hint">Separa il brano in voce / batteria / basso / chitarra / piano / altro. La prima volta scarica il modello (~136&nbsp;MB) e su CPU richiede qualche minuto; la separazione gira in background (l'app resta utilizzabile) e il risultato viene messo in cache.</div>
+    </section>
+
+    <footer class="shortcuts">
+      <span><b>Spazio</b> play/pausa</span>
+      <span><b>Z/X</b> tonalità −/+</span>
+      <span><b>,/.</b> velocità −/+</span>
+      <span><b>A/B</b> loop in/out</span>
+      <span><b>L</b> loop on/off</span>
+      <span><b>M</b> marker</span>
+      <span><b>←/→</b> ±5s</span>
+    </footer>
+  </main>
+
+  <div id="dropOverlay" class="drop-overlay" style="display:none">
+    <div class="drop-box">⬇ Rilascia qui<br><small>brano audio/video per un nuovo progetto · file <b>.ppx</b> per aprirlo</small></div>
+  </div>
+
+  <div id="dlModal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-title">Scarica da YouTube</div>
+      <div class="modal-body">Cosa vuoi scaricare?</div>
+      <div class="modal-actions">
+        <button id="dlAudio" class="btn">🎵 Solo audio</button>
+        <button id="dlVideo" class="btn">🎬 Audio + video</button>
+        <button id="dlCancel" class="btn btn-ghost">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="dist/app.js"></script>
+</body>
+</html>

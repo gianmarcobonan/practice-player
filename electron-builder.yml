@@ -1,0 +1,58 @@
+appId: com.gianmarco.practiceplayer
+productName: Practice Player
+copyright: Copyright (c) 2026 Gianmarco Bonan
+
+directories:
+  output: dist
+  buildResources: build
+
+files:
+  - src/**/*
+  - package.json
+  - "!**/*.map"
+  - "!src/renderer/app/**"
+  - "!src/renderer/worklet/**"
+
+# onnxruntime-node ships native binaries that must live outside the asar.
+asarUnpack:
+  - "**/node_modules/onnxruntime-node/**"
+
+# Native binaries and AI models are shipped unpacked next to the app, not inside the asar.
+extraResources:
+  - from: bin
+    to: bin
+    filter: ["**/*"]
+  - from: models
+    to: models
+    filter: ["**/*"]
+
+win:
+  target:
+    - target: nsis      # installer (supports auto-update)
+    - target: portable  # single exe (no install, no auto-update)
+  # Avoid winCodeSign (its archive contains macOS symlinks that fail to extract
+  # on Windows without admin/Developer Mode). We don't sign for personal use.
+  signAndEditExecutable: false
+
+# Per-user one-click installer: no admin rights, creates shortcuts, supports
+# silent auto-update via electron-updater.
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Practice Player
+  artifactName: PracticePlayer-Setup-${version}.exe
+
+portable:
+  unpackDirName: PracticePlayer
+  artifactName: PracticePlayer-${version}-portable.exe
+
+# Publishing is configured only for the `release` script / CI (via
+# -c.publish.provider=github), where owner/repo are auto-detected from the git
+# remote. Keeping it out of this file lets local `npm run build` succeed without
+# any repo info (and without generating an update feed).
+
+# We have not configured code signing (personal use).
+forceCodeSigning: false
