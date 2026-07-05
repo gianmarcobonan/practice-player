@@ -26,7 +26,7 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
 
 ## Uso (per chi usa l'app)
 
-1. Avvia l'app (installer o portable).
+1. Avvia l'app (installer Windows o AppImage Linux).
 2. **Apri brano** (mp3, m4a, wav, flac, ogg…) o **Apri progetto** (`.ppx`), oppure incolla un
    **link YouTube** e premi *Scarica* (chiede *solo audio* o *audio+video* per i video tutorial).
    Con *Salva progetto* esporti media + impostazioni in un unico file `.ppx`.
@@ -38,15 +38,16 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
    - **Loop A/B**: imposta A e B, attiva *Loop* per ripetere una sezione.
    - **Marker**: aggiungi segnaposto e cliccali per saltare alle sezioni.
    - **Metronomo**: BPM con *TAP*, *count-in* prima del play (il click segue la velocità).
-   - **Separa**: divide in voce/batteria/basso/altro; poi muto/solo/volume per ogni stem
-     (es. muta la voce per il karaoke, o fai *solo* di uno strumento).
+   - **Separa**: divide in 6 stem (voce/batteria/basso/chitarra/piano/altro); poi muto/solo/volume
+     per ogni stem (es. muta la voce per il karaoke, o fai *solo* di uno strumento).
 4. Le impostazioni (tonalità, velocità, loop, marker, ecc.) vengono **salvate per ogni brano**;
    i dati (impostazioni, cache degli stem e modello AI) stanno nel profilo utente
    (`%APPDATA%\Practice Player` su Windows, `~/.config/Practice Player` su Linux) e **restano
    anche dopo un aggiornamento** (il modello si scarica una sola volta).
 
 ### Note importanti sulla separazione stem
-- Al **primo uso** scarica il modello AI HT-Demucs (~630 MB) una sola volta in `data/models/`.
+- Al **primo uso** scarica il modello AI HT-Demucs 6 stem (~136 MB) una sola volta; resta nel
+  profilo utente (vedi sopra), quindi non viene più riscaricato nemmeno dopo un aggiornamento.
 - Su **CPU** la separazione richiede **diversi minuti per brano** (es. ~5× la durata). Il
   risultato viene messo in **cache**, quindi la volta dopo è immediato.
 
@@ -97,17 +98,17 @@ aggiornamento (`latest.yml` per Windows, `latest-linux.yml` per Linux).
 Per pubblicare una nuova versione:
 
 ```sh
-# 1. aggiorna il numero di versione in package.json (es. 1.0.1)
+# 1. aggiorna il numero di versione in package.json (es. 1.0.2)
 # 2. crea e pusha il tag corrispondente (deve iniziare con "v")
-git commit -am "Release 1.0.1"
-git tag v1.0.1
+git commit -am "Release 1.0.2"
+git tag v1.0.2
 git push origin main --tags
 ```
 
 L'app installata controlla il feed all'avvio (e ogni 6 ore): se c'è una versione più recente la
 **scarica in background** e mostra *Riavvia e aggiorna*; in ogni caso l'aggiornamento viene
-applicato alla chiusura. Il numero del tag (`v1.0.1`) deve combaciare con la versione in
-`package.json` (`1.0.1`). owner/repo del feed sono rilevati in automatico dal remote git.
+applicato alla chiusura. Il numero del tag (`v1.0.2`) deve combaciare con la versione in
+`package.json` (`1.0.2`). owner/repo del feed sono rilevati in automatico dal remote git.
 
 ## Note
 - Il download da YouTube è pensato per uso personale; è tecnicamente contro i ToS di YouTube.
