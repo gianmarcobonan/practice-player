@@ -52,7 +52,11 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
 - Al **primo uso** scarica il modello AI HT-Demucs 6 stem (~136 MB) una sola volta; resta nel
   profilo utente (vedi sopra), quindi non viene più riscaricato nemmeno dopo un aggiornamento.
 - Su **CPU** la separazione richiede **diversi minuti per brano** (es. ~5× la durata). Il
-  risultato viene messo in **cache**, quindi la volta dopo è immediato.
+  risultato viene messo in **cache** (indicizzata sul contenuto del brano), quindi la volta dopo
+  è immediato.
+- Se **salvi un progetto** con gli stem separati (es. voce mutata), alla **riapertura gli stem
+  vengono ripristinati automaticamente** con lo stato salvato — istantaneo se ancora in cache,
+  altrimenti li ricrea con la solita barra di avanzamento.
 
 ### Scorciatoie
 `Spazio` play/pausa · `Z`/`X` tonalità −/+ · `,`/`.` velocità −/+ · `A`/`B` loop in/out ·

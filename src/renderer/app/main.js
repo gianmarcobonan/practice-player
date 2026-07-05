@@ -607,6 +607,10 @@ async function openProject(ppxPath) {
     await loadPath(res.mediaPath, res.settings);
     // Remember the .ppx so a later "Salva" overwrites it (set AFTER loadPath, which clears it).
     currentProjectPath = res.projectPath || null;
+    // If the project had separated stems, restore them so the saved mute/solo/volume
+    // take effect. Instant when the stem cache is still present (keyed by content),
+    // otherwise it re-separates with the usual progress bar.
+    if (savedStemState && savedStemState.length) await separateStems();
   } catch (err) {
     setStatus('errore apertura progetto: ' + err.message);
     console.error('PROJECT_OPEN_ERROR', err);

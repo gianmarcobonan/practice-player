@@ -19,6 +19,24 @@ function cacheKeyFor(filePath) {
     .digest('hex').slice(0, 16);
 }
 
+// Content hash of the media bytes. Unlike cacheKeyFor (path+mtime), this is the
+// SAME for a file and any identical copy — e.g. the original song and the media
+// re-extracted from a .ppx. Used to key the stem cache so reopening a project
+// reuses the stems already separated (no re-separation), and so export finds them.
+function contentKeyFor(filePath) {
+  return new Promise((resolve, reject) => {
+    const h = crypto.createHash('sha1');
+    const s = fs.createReadStream(filePath);
+    s.on('data', (d) => h.update(d));
+    s.on('end', () => resolve(h.digest('hex').slice(0, 16)));
+    s.on('error', reject);
+  });
+}
+
+async function stemCacheDir(filePath) {
+  return path.join(dataDir(), 'cache', 'stems', await contentKeyFor(filePath));
+}
+
 // Extract a real file path from an argv array (used for the .ppx file
 // association, drag-onto-icon, and command-line auto-load/testing).
 function fileArgFrom(argv, skip) {
@@ -109,8 +127,7 @@ function runSeparationWorker(job, onProgress) {
 
 ipcMain.handle('stem:separate', async (evt, filePath) => {
   const modelDir = path.join(dataDir(), 'models');
-  const key = cacheKeyFor(filePath);
-  const cacheDir = path.join(dataDir(), 'cache', 'stems', key);
+  const cacheDir = await stemCacheDir(filePath);
 
   if (!separate.readCache(cacheDir)) {
     await runSeparationWorker(
@@ -188,12 +205,12 @@ ipcMain.handle('export:render', async (evt, opts) => {
   });
   if (res.canceled || !res.filePath) return null;
 
-  const key = cacheKeyFor(filePath);
+  const cacheDir = await stemCacheDir(filePath);
   await runExportWorker({
     filePath,
     ffmpegPath: ffmpegPath(),
     wasmPath: path.join(__dirname, '..', 'renderer', 'dist', 'rubberband.wasm'),
-    cacheDir: path.join(dataDir(), 'cache', 'stems', key),
+    cacheDir,
     useStems: !!useStems,
     settings,
     mode,
