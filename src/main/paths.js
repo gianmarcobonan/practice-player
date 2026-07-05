@@ -19,18 +19,24 @@ function modelPath(name) {
   return path.join(resourceRoot(), 'models', name);
 }
 
-const ffmpegPath = () => binPath('ffmpeg.exe');
-const ytDlpPath = () => binPath('yt-dlp.exe');
+// Bundled tools are `ffmpeg.exe`/`yt-dlp.exe` on Windows, `ffmpeg`/`yt-dlp` elsewhere.
+const EXE = process.platform === 'win32' ? '.exe' : '';
+const ffmpegPath = () => binPath('ffmpeg' + EXE);
+const ytDlpPath = () => binPath('yt-dlp' + EXE);
 
 // Writable data dir for per-song settings and stem cache.
-// Portable build: sits next to the .exe (persists on a USB stick).
-// Dev / fallback: project root /data, or userData if exe path is unknown.
+// - Windows installed: next to the .exe (also handles the old portable build).
+// - Linux (AppImage) / macOS: the app runs from a read-only mount, so we can't
+//   write next to the exe — use the per-user data dir instead.
+// - Dev: project root /data.
 function dataDir() {
   let base;
   if (process.env.PORTABLE_EXECUTABLE_DIR) {
     base = process.env.PORTABLE_EXECUTABLE_DIR;
-  } else if (app.isPackaged) {
+  } else if (app.isPackaged && process.platform === 'win32') {
     base = path.dirname(app.getPath('exe'));
+  } else if (app.isPackaged) {
+    base = app.getPath('userData');
   } else {
     base = path.join(__dirname, '..', '..');
   }

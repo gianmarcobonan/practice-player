@@ -2,28 +2,27 @@
 
 [![Ultima release](https://img.shields.io/github/v/release/gianmarcobonan/practice-player?label=scarica&style=for-the-badge)](https://github.com/gianmarcobonan/practice-player/releases/latest)
 ![Windows](https://img.shields.io/badge/Windows-10%2F11%2064--bit-blue?style=for-the-badge&logo=windows)
+![Linux](https://img.shields.io/badge/Linux-x86--64-333?style=for-the-badge&logo=linux&logoColor=white)
 
-App per Windows per esercitarsi suonando: cambia **tonalità** e **velocità** in tempo reale
+App per esercitarsi suonando: cambia **tonalità** e **velocità** in tempo reale
 (indipendenti), separa le tracce in **stem**, riproduce **video tutorial** sincronizzati,
 scarica **audio o audio+video** da **YouTube**, con **loop A/B**, **marker**,
 **metronomo automatico**, suggerimento di **intonazione** e **memoria per brano**. Le sessioni
 si possono salvare in un **file unico di progetto** (`.ppx`) che racchiude media + impostazioni.
 
 > ### 📥 [**Scarica l'ultima versione**](https://github.com/gianmarcobonan/practice-player/releases/latest)
-> Windows 10/11 64-bit · scegli l'**Installer** (si auto-aggiorna) o la versione **Portable**.
+> **Windows** (installer `.exe`) o **Linux** (`.AppImage`) — 64-bit. Entrambe si auto-aggiornano.
 
 ## Installazione
 
-Due modi:
+Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-player/releases/latest)**:
 
-- **Installer** `PracticePlayer-Setup-<versione>.exe` — installa per l'utente corrente (niente
-  permessi admin), crea i collegamenti e **si aggiorna da solo** quando esce una nuova versione.
-- **Portable** `PracticePlayer-<versione>-portable.exe` — nessuna installazione (anche da
-  chiavetta), ma **non** si auto-aggiorna.
-
-Entrambi si scaricano dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-player/releases/latest)**
-del repository. L'exe non è firmato (uso personale): Windows SmartScreen può avvisare al primo
-avvio → *Ulteriori informazioni → Esegui comunque*.
+- **Windows** — `PracticePlayer-Setup-<versione>.exe`: installer per l'utente corrente (niente
+  permessi admin), crea i collegamenti e **si aggiorna da solo**. L'exe non è firmato (uso
+  personale): SmartScreen può avvisare al primo avvio → *Ulteriori informazioni → Esegui comunque*.
+- **Linux** — `PracticePlayer-<versione>.AppImage`: singolo file, nessuna installazione, **si
+  aggiorna da solo**. Rendilo eseguibile e lancialo:
+  `chmod +x PracticePlayer-*.AppImage && ./PracticePlayer-*.AppImage`.
 
 ## Uso (per chi usa l'app)
 
@@ -59,14 +58,15 @@ Richiede Node.js (testato con v24). Comandi:
 
 ```sh
 npm install
-npm run fetch-binaries   # scarica ffmpeg.exe + yt-dlp.exe in bin/ (non versionati)
+npm run fetch-binaries   # scarica ffmpeg + yt-dlp in bin/ (per il tuo OS; non versionati)
 npm start                # build del renderer + avvio in dev
-npm run build            # crea installer NSIS + portable in dist/ (senza pubblicare)
+npm run build            # crea l'installer/AppImage per il tuo sistema in dist/ (senza pubblicare)
 ```
 
-I binari nativi `bin/ffmpeg.exe` e `bin/yt-dlp.exe` **non sono nel repo** (ffmpeg supera il
-limite di 100 MB per file di GitHub): vengono scaricati da `scripts/fetch-binaries.mjs` (lo fa
-anche la CI). Su un checkout pulito, esegui `npm run fetch-binaries` prima di `npm start`/`build`.
+I binari nativi `ffmpeg` e `yt-dlp` **non sono nel repo** (ffmpeg supera il limite di 100 MB
+per file di GitHub): vengono scaricati da `scripts/fetch-binaries.mjs` — la versione giusta per
+il sistema (`.exe` su Windows, static build su Linux), lo fa anche la CI. Su un checkout pulito,
+esegui `npm run fetch-binaries` prima di `npm start`/`build`.
 
 ### Struttura
 - `src/main/` — processo principale Electron: IPC, decodifica (`ffmpeg`), download
@@ -74,7 +74,7 @@ anche la CI). Su un checkout pulito, esegui `npm run fetch-binaries` prima di `n
 - `src/renderer/app/` — UI + motore di riproduzione (sorgente, bundlata da esbuild).
 - `src/renderer/worklet/engine-processor.js` — AudioWorklet con **rubberband-wasm**
   (time-stretch + pitch-shift real-time sul mix degli stem).
-- `bin/` — `ffmpeg.exe`, `yt-dlp.exe` (inclusi nell'exe).
+- `bin/` — `ffmpeg` + `yt-dlp` (inclusi nell'app; `.exe` su Windows, static build su Linux).
 - `scripts/` — build del renderer e test (`test-rubberband.mjs`, `test-tuning.mjs`,
   `test-separate.cjs`).
 
@@ -88,8 +88,9 @@ node scripts/test-separate.cjs run <f>  # verifica separazione (richiede i model
 ## Rilascio e aggiornamenti automatici
 
 Il rilascio è automatico tramite **GitHub Actions** (`.github/workflows/release.yml`): a ogni
-**tag di versione** la CI scarica i binari, compila installer + portable e pubblica una
-**GitHub Release** con i file e il feed di aggiornamento (`latest.yml`).
+**tag di versione** la CI (Windows + Ubuntu in parallelo) scarica i binari, compila l'installer
+Windows e l'AppImage Linux e li pubblica in un'unica **GitHub Release** con i feed di
+aggiornamento (`latest.yml` per Windows, `latest-linux.yml` per Linux).
 
 Per pubblicare una nuova versione:
 
@@ -108,5 +109,5 @@ applicato alla chiusura. Il numero del tag (`v1.0.1`) deve combaciare con la ver
 
 ## Note
 - Il download da YouTube è pensato per uso personale; è tecnicamente contro i ToS di YouTube.
-- L'exe non è firmato (uso personale): Windows SmartScreen potrebbe avvisare al primo avvio.
-- Il portable **non** si auto-aggiorna; per gli aggiornamenti automatici usa l'installer.
+- L'app non è firmata (uso personale): su Windows SmartScreen potrebbe avvisare al primo avvio.
+- Su Linux l'`.AppImage` va reso eseguibile (`chmod +x`) prima del primo avvio.

@@ -29,7 +29,6 @@ extraResources:
 win:
   target:
     - target: nsis      # installer (supports auto-update)
-    - target: portable  # single exe (no install, no auto-update)
   # Avoid winCodeSign (its archive contains macOS symlinks that fail to extract
   # on Windows without admin/Developer Mode). We don't sign for personal use.
   signAndEditExecutable: false
@@ -45,9 +44,13 @@ nsis:
   shortcutName: Practice Player
   artifactName: PracticePlayer-Setup-${version}.exe
 
-portable:
-  unpackDirName: PracticePlayer
-  artifactName: PracticePlayer-${version}-portable.exe
+# Linux: AppImage is the format electron-updater can self-update (like the NSIS
+# installer on Windows). Built on an Ubuntu CI runner.
+linux:
+  target:
+    - target: AppImage
+  category: AudioVideo
+  artifactName: PracticePlayer-${version}.AppImage
 
 # Publishing is configured only for the `release` script / CI (via
 # -c.publish.provider=github), where owner/repo are auto-detected from the git

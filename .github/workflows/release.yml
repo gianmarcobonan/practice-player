@@ -11,7 +11,13 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # Windows builds the NSIS installer, Ubuntu builds the Linux AppImage.
+    # Both publish their assets (+ latest.yml / latest-linux.yml) to the same release.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,7 +34,7 @@ jobs:
       - name: Fetch native binaries (ffmpeg, yt-dlp)
         run: node scripts/fetch-binaries.mjs
 
-      - name: Build installer + portable and publish release
+      - name: Build and publish release
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

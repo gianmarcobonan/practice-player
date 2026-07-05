@@ -6,9 +6,10 @@ dist/
 src/renderer/dist/
 .bin-tmp/
 
-# Bundled native tools (fetched via scripts/fetch-binaries.mjs; ffmpeg.exe > 100MB)
-bin/ffmpeg.exe
-bin/yt-dlp.exe
+# Bundled native tools (fetched via scripts/fetch-binaries.mjs; ffmpeg > 100MB).
+# Windows (.exe) and Linux binaries; only the README stays in git.
+/bin/*
+!/bin/README.md
 
 # Runtime/user data (models cache, downloads, settings, stem cache, projects)
 data/
