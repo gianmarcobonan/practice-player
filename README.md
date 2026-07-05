@@ -29,9 +29,9 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
 1. Avvia l'app (installer Windows o AppImage Linux).
 2. **Apri brano** (mp3, m4a, wav, flac, ogg…) o **Apri progetto** (`.ppx`), oppure incolla un
    **link YouTube** e premi *Scarica* (chiede *solo audio* o *audio+video* per i video tutorial).
-   *Salva progetto* racchiude media + impostazioni in un unico file `.ppx`: se il progetto è già
-   stato salvato (o aperto da `.ppx`) **sovrascrive** quel file senza chiedere, mentre *Salva con
-   nome…* crea sempre un nuovo `.ppx` e ci si sposta sopra.
+   *Salva progetto* racchiude media (+ eventuali **stem** separati) + impostazioni in un unico file
+   `.ppx`: se il progetto è già stato salvato (o aperto da `.ppx`) **sovrascrive** quel file senza
+   chiedere, mentre *Salva con nome…* crea sempre un nuovo `.ppx` e ci si sposta sopra.
 3. Controlli principali:
    - **Tonalità**: `− ½ tono` / `+ ½ tono` (la velocità non cambia).
    - **Velocità**: preset (−50%…+10%) o barra fine ±1% (la tonalità non cambia).
@@ -54,9 +54,10 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
 - Su **CPU** la separazione richiede **diversi minuti per brano** (es. ~5× la durata). Il
   risultato viene messo in **cache** (indicizzata sul contenuto del brano), quindi la volta dopo
   è immediato.
-- Se **salvi un progetto** con gli stem separati (es. voce mutata), alla **riapertura gli stem
-  vengono ripristinati automaticamente** con lo stato salvato — istantaneo se ancora in cache,
-  altrimenti li ricrea con la solita barra di avanzamento.
+- Se **salvi un progetto** con gli stem separati (es. voce mutata), gli stem vengono **inclusi nel
+  file `.ppx`** (compressi in Opus ~192 kbps, pochi MB). Il progetto è così **completamente
+  portable**: riaprendolo — anche su un altro PC — gli stem e il loro stato tornano **subito**,
+  senza doverli riseparare. (Per un progetto video, il `.ppx` contiene già anche il video.)
 
 ### Scorciatoie
 `Spazio` play/pausa · `Z`/`X` tonalità −/+ · `,`/`.` velocità −/+ · `A`/`B` loop in/out ·

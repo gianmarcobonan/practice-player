@@ -9,6 +9,7 @@ const { decodeToPcm, hasVideoStream } = require('./services/decode');
 const youtube = require('./services/youtube');
 const separate = require('./services/separate');
 const project = require('./services/project');
+const stemsPack = require('./services/stems-pack');
 const updater = require('./services/updater');
 const { dataDir, ffmpegPath } = require('./paths');
 
@@ -35,6 +36,39 @@ function contentKeyFor(filePath) {
 
 async function stemCacheDir(filePath) {
   return path.join(dataDir(), 'cache', 'stems', await contentKeyFor(filePath));
+}
+
+// Read the separated stems from the cache and encode each to Opus, ready to be
+// embedded in a .ppx. Returns null if this media has no (complete) stem cache.
+async function packStemsFromCache(mediaPath) {
+  const cacheDir = await stemCacheDir(mediaPath);
+  const metaPath = path.join(cacheDir, 'meta.json');
+  if (!fs.existsSync(metaPath)) return null;
+  const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+  const blobs = [];
+  for (const src of separate.SOURCES) {
+    const f32 = path.join(cacheDir, `${src}.f32`);
+    if (!fs.existsSync(f32)) return null; // incomplete cache — don't embed a partial set
+    blobs.push({ name: src, buffer: await stemsPack.encodeOpus(ffmpegPath(), f32) });
+  }
+  return { codec: 'opus', sources: separate.SOURCES, total: meta.total, sr: meta.sr, blobs };
+}
+
+// Decode stems embedded in a .ppx back into the stem cache, so the normal
+// separation flow finds them (instant) instead of re-running the model.
+async function unpackStemsToCache(mediaPath, stems) {
+  const cacheDir = await stemCacheDir(mediaPath);
+  if (separate.readCache(cacheDir)) return; // already present
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const bytes = stems.total * 2 * 4; // interleaved stereo f32
+  for (const blob of stems.blobs) {
+    let f32 = await stemsPack.decodeOpus(ffmpegPath(), blob.buffer);
+    // Opus resampling can drift by a few samples — force exactly `total` frames.
+    if (f32.length > bytes) f32 = f32.subarray(0, bytes);
+    else if (f32.length < bytes) { const b = Buffer.alloc(bytes); f32.copy(b); f32 = b; }
+    fs.writeFileSync(path.join(cacheDir, `${blob.name}.f32`), f32);
+  }
+  fs.writeFileSync(path.join(cacheDir, 'meta.json'), JSON.stringify({ total: stems.total, sr: stems.sr }));
 }
 
 // Extract a real file path from an argv array (used for the .ppx file
@@ -141,7 +175,7 @@ ipcMain.handle('stem:separate', async (evt, filePath) => {
 });
 
 // --- Single-file project (.ppx): media + settings bundled together ---
-ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, targetPath) => {
+ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, targetPath, includeStems) => {
   if (!mediaPath || !fs.existsSync(mediaPath)) throw new Error('Nessun brano da salvare.');
   // Overwrite the open project directly when a target path is given; otherwise
   // prompt for a location ("Salva con nome" / first save of a new project).
@@ -156,7 +190,9 @@ ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, 
     if (res.canceled || !res.filePath) return null;
     dest = res.filePath;
   }
-  await project.save(mediaPath, settings, dest);
+  // Embed the separated stems (Opus) so the project is fully portable.
+  const stemPack = includeStems ? await packStemsFromCache(mediaPath) : null;
+  await project.save(mediaPath, settings, dest, stemPack);
   return dest;
 });
 
@@ -171,8 +207,14 @@ ipcMain.handle('project:open', async (_evt, ppxPath) => {
     if (res.canceled || res.filePaths.length === 0) return null;
     p = res.filePaths[0];
   }
-  const { mediaPath, settings } = await project.load(p, path.join(dataDir(), 'projects'));
-  return { mediaPath, settings, projectPath: p };
+  const { mediaPath, settings, stems } = await project.load(p, path.join(dataDir(), 'projects'));
+  // Restore embedded stems into the cache so opening the project loads them
+  // instantly (no re-separation), on this or any other machine.
+  if (stems) {
+    try { await unpackStemsToCache(mediaPath, stems); }
+    catch (e) { console.error('STEM_UNPACK_ERROR', e); }
+  }
+  return { mediaPath, settings, projectPath: p, hasStems: !!stems };
 });
 
 // --- Export processed audio / audio+video ---

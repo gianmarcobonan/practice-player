@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   engineWasm: () => ipcRenderer.invoke('engine:wasm'),
 
   // Single-file project (media + settings)
-  saveProject: (mediaPath, settings, name, targetPath) => ipcRenderer.invoke('project:save', mediaPath, settings, name, targetPath),
+  saveProject: (mediaPath, settings, name, targetPath, includeStems) => ipcRenderer.invoke('project:save', mediaPath, settings, name, targetPath, includeStems),
   openProject: (ppxPath) => ipcRenderer.invoke('project:open', ppxPath),
 
   // Export (processed audio / audio+video)

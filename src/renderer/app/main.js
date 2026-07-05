@@ -583,11 +583,12 @@ async function saveProject(asNew) {
   const name = (els.songName.textContent || 'progetto').replace(/\.[^.]+$/, '');
   // When overwriting, target the open .ppx (no dialog); otherwise pass null to prompt.
   const target = asNew ? null : currentProjectPath;
+  const withStems = stemState.length > 0;
   try {
     els.saveProjectBtn.disabled = true;
     els.saveProjectAsBtn.disabled = true;
-    setStatus('salvataggio progetto…');
-    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target);
+    setStatus(withStems ? 'salvataggio progetto (comprimo stem)…' : 'salvataggio progetto…');
+    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target, withStems);
     if (saved) currentProjectPath = saved;
     setStatus(saved ? 'progetto salvato' : 'pronto');
   } catch (err) {
@@ -607,10 +608,10 @@ async function openProject(ppxPath) {
     await loadPath(res.mediaPath, res.settings);
     // Remember the .ppx so a later "Salva" overwrites it (set AFTER loadPath, which clears it).
     currentProjectPath = res.projectPath || null;
-    // If the project had separated stems, restore them so the saved mute/solo/volume
-    // take effect. Instant when the stem cache is still present (keyed by content),
-    // otherwise it re-separates with the usual progress bar.
-    if (savedStemState && savedStemState.length) await separateStems();
+    // If the project carries stems (embedded in the .ppx, or a saved stem state),
+    // restore them so the saved mute/solo/volume take effect. Instant when the
+    // stems are embedded/cached; otherwise it re-separates with the progress bar.
+    if (res.hasStems || (savedStemState && savedStemState.length)) await separateStems();
   } catch (err) {
     setStatus('errore apertura progetto: ' + err.message);
     console.error('PROJECT_OPEN_ERROR', err);
