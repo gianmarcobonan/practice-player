@@ -25,6 +25,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // Auto-update
   onUpdateStatus: (cb) => ipcRenderer.on('update:status', (_e, s) => cb(s)),
+  updateInfo: () => ipcRenderer.invoke('update:info'),
+  checkUpdate: () => ipcRenderer.invoke('update:check'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
 
   // YouTube

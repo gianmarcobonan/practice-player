@@ -110,7 +110,9 @@ git push origin main --tags
 
 L'app installata controlla il feed all'avvio (e ogni 6 ore): se c'è una versione più recente la
 **scarica in background** e mostra *Riavvia e aggiorna*; in ogni caso l'aggiornamento viene
-applicato alla chiusura. Il numero del tag (`vX.Y.Z`) deve combaciare con la versione in
+applicato alla chiusura. C'è anche un pannello **Aggiornamenti** in-app che mostra la versione
+installata e lo stato, con un tasto **Controlla** per cercare subito e **Aggiorna e riavvia**
+quando un aggiornamento è pronto. Il numero del tag (`vX.Y.Z`) deve combaciare con la versione in
 `package.json` (`X.Y.Z`). owner/repo del feed sono rilevati in automatico dal remote git.
 
 ## Note

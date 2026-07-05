@@ -11,8 +11,7 @@
   <header class="topbar">
     <h1>Practice Player</h1>
     <span id="songName" class="song-name">nessun brano</span>
-    <span id="updateInfo" class="update-info" style="display:none"></span>
-    <button id="updateBtn" class="btn btn-update" style="display:none">⟳ Riavvia e aggiorna</button>
+    <button id="updateBtn" class="btn btn-update" style="display:none" title="Un aggiornamento è pronto: riavvia per applicarlo">⟳ Riavvia e aggiorna</button>
     <span id="status" class="status">avvio…</span>
   </header>
 
@@ -165,6 +164,17 @@
           <span id="octVal" class="oct-val">4</span>
           <button id="octUp" class="btn mini">+</button>
           <button id="tunerStop" class="btn btn-ghost">⏹ Stop</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Aggiornamenti</div>
+        <div class="hint" style="margin:0 0 6px">Versione installata: <b id="appVersion">—</b></div>
+        <div id="updateStatus" class="hint" style="margin:0 0 8px">—</div>
+        <div id="updateProgress" class="sp-track" style="display:none;margin-bottom:8px"><div id="updateBar" class="sp-fill"></div></div>
+        <div class="tuner-mode" style="margin:0">
+          <button id="checkUpdateBtn" class="btn">🔄 Controlla</button>
+          <button id="applyUpdateBtn" class="btn btn-update" style="display:none">⟳ Aggiorna e riavvia</button>
         </div>
       </div>
     </div>

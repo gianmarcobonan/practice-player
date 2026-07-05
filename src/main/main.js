@@ -307,6 +307,14 @@ if (!app.requestSingleInstanceLock()) {
 
 // Renderer asks to restart into the freshly downloaded update.
 ipcMain.handle('update:install', () => updater.installUpdate());
+// Update panel: current version + whether self-update is available in this build.
+ipcMain.handle('update:info', () => ({
+  version: app.getVersion(),
+  supported: updater.isSupported(),
+  portable: updater.isPortableBuild()
+}));
+// Manual "check for updates" trigger.
+ipcMain.handle('update:check', () => updater.checkForUpdates());
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();

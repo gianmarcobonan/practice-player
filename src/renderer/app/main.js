@@ -70,8 +70,13 @@ const els = {
   addMarker: document.getElementById('addMarker'),
   markerList: document.getElementById('markerList'),
   // auto-update
-  updateInfo: document.getElementById('updateInfo'),
   updateBtn: document.getElementById('updateBtn'),
+  appVersion: document.getElementById('appVersion'),
+  updateStatus: document.getElementById('updateStatus'),
+  updateProgress: document.getElementById('updateProgress'),
+  updateBar: document.getElementById('updateBar'),
+  checkUpdateBtn: document.getElementById('checkUpdateBtn'),
+  applyUpdateBtn: document.getElementById('applyUpdateBtn'),
   // metronome
   metroToggle: document.getElementById('metroToggle'),
   metroDown: document.getElementById('metroDown'),
@@ -875,26 +880,62 @@ if (window.api.onExportProgress) {
   });
 }
 
-// --- Auto-update status ---
+// --- Auto-update panel ---
+let updateSupported = false;
+function setUpdateStatus(text, { progress = null, ready = false } = {}) {
+  els.updateStatus.textContent = text;
+  if (progress == null) {
+    els.updateProgress.style.display = 'none';
+  } else {
+    els.updateProgress.style.display = '';
+    els.updateBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+  }
+  // The "restart to update" action shows both in the panel and the header pill.
+  els.applyUpdateBtn.style.display = ready ? '' : 'none';
+  els.updateBtn.style.display = ready ? '' : 'none';
+}
+
 if (window.api.onUpdateStatus) {
   window.api.onUpdateStatus((s) => {
     if (!s) return;
-    if (s.state === 'downloading') {
-      els.updateInfo.style.display = '';
-      els.updateInfo.textContent = `scarico aggiornamento… ${s.percent || 0}%`;
-    } else if (s.state === 'downloaded') {
-      els.updateInfo.style.display = '';
-      els.updateInfo.textContent = `aggiornamento ${s.version} pronto`;
-      els.updateBtn.style.display = '';
-    } else if (s.state === 'available') {
-      els.updateInfo.style.display = '';
-      els.updateInfo.textContent = `nuova versione ${s.version} disponibile…`;
-    } else if (s.state === 'error') {
-      console.error('UPDATE_ERROR', s.message);
+    switch (s.state) {
+      case 'checking': setUpdateStatus('Controllo aggiornamenti in corso…'); break;
+      case 'none': setUpdateStatus('Sei alla versione più recente.'); break;
+      case 'available': setUpdateStatus(`Nuova versione ${s.version} trovata: scarico…`, { progress: 0 }); break;
+      case 'downloading': setUpdateStatus(`Scarico l'aggiornamento… ${s.percent || 0}%`, { progress: s.percent || 0 }); break;
+      case 'downloaded': setUpdateStatus(`Aggiornamento ${s.version} pronto.`, { ready: true }); break;
+      case 'error': setUpdateStatus('Errore nel controllo aggiornamenti.'); console.error('UPDATE_ERROR', s.message); break;
     }
   });
-  els.updateBtn.addEventListener('click', () => window.api.installUpdate());
 }
+
+async function checkForUpdate(manual) {
+  if (!updateSupported) return;
+  setUpdateStatus('Controllo aggiornamenti in corso…');
+  const r = await window.api.checkUpdate();
+  // If the check couldn't even start (offline/feed error) and no event followed.
+  if (r && r.error && manual) setUpdateStatus('Impossibile controllare ora (sei offline?).');
+}
+
+els.checkUpdateBtn.addEventListener('click', () => checkForUpdate(true));
+els.applyUpdateBtn.addEventListener('click', () => window.api.installUpdate());
+els.updateBtn.addEventListener('click', () => window.api.installUpdate());
+
+(async function initUpdates() {
+  try {
+    const info = await window.api.updateInfo();
+    els.appVersion.textContent = info.version || '—';
+    updateSupported = !!info.supported;
+    if (!updateSupported) {
+      els.checkUpdateBtn.disabled = true;
+      setUpdateStatus(info.portable
+        ? 'La versione portable non si auto-aggiorna: scarica la nuova dalle Releases.'
+        : 'Aggiornamenti non disponibili in questa build (sviluppo).');
+    } else {
+      setUpdateStatus('Premi "Controlla" per cercare aggiornamenti.');
+    }
+  } catch (e) { console.error('UPDATE_INFO_ERROR', e); }
+})();
 
 async function togglePlay() {
   if (!player.loaded) return;

@@ -8,18 +8,25 @@
 const { app } = require('electron');
 
 let autoUpdater = null;
+let supported = false;
+
+// A portable build sets PORTABLE_EXECUTABLE_DIR and has no installer to update.
+const isPortable = () => !!process.env.PORTABLE_EXECUTABLE_DIR;
+// Updates only work in an installed (packaged, non-portable) build.
+function isSupported() { return supported; }
+function isPortableBuild() { return app.isPackaged && isPortable(); }
 
 function initAutoUpdate(getWindow) {
   // Dev build: nothing to update.
   if (!app.isPackaged) return;
-  // Portable build sets PORTABLE_EXECUTABLE_DIR and has no installer to update.
-  if (process.env.PORTABLE_EXECUTABLE_DIR) return;
+  if (isPortable()) return;
 
   try {
     ({ autoUpdater } = require('electron-updater'));
   } catch {
     return; // dependency missing — silently skip
   }
+  supported = true;
 
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
@@ -42,8 +49,15 @@ function initAutoUpdate(getWindow) {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
+// Manual "check for updates" trigger from the UI. Returns { error } if the check
+// couldn't even start; otherwise progress arrives via the update:status events.
+function checkForUpdates() {
+  if (!autoUpdater) return { error: 'unsupported' };
+  return autoUpdater.checkForUpdates().then(() => ({ ok: true })).catch((e) => ({ error: String((e && e.message) || e) }));
+}
+
 function installUpdate() {
   if (autoUpdater) autoUpdater.quitAndInstall();
 }
 
-module.exports = { initAutoUpdate, installUpdate };
+module.exports = { initAutoUpdate, installUpdate, checkForUpdates, isSupported, isPortableBuild };
