@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('api', {
   engineWasm: () => ipcRenderer.invoke('engine:wasm'),
 
   // Single-file project (media + settings)
-  saveProject: (mediaPath, settings, name, targetPath, includeStems) => ipcRenderer.invoke('project:save', mediaPath, settings, name, targetPath, includeStems),
+  saveProject: (mediaPath, settings, name, targetPath, includeStems, modelId) => ipcRenderer.invoke('project:save', mediaPath, settings, name, targetPath, includeStems, modelId),
   openProject: (ppxPath) => ipcRenderer.invoke('project:open', ppxPath),
 
   // Export (processed audio / audio+video)
@@ -36,7 +36,8 @@ contextBridge.exposeInMainWorld('api', {
   onYoutubeProgress: (cb) => ipcRenderer.on('youtube:progress', (_e, pct) => cb(pct)),
 
   // Stem separation
-  separateStems: (filePath) => ipcRenderer.invoke('stem:separate', filePath),
+  listModels: () => ipcRenderer.invoke('models:list'),
+  separateStems: (filePath, modelId) => ipcRenderer.invoke('stem:separate', filePath, modelId),
   onStemProgress: (cb) => ipcRenderer.on('stem:progress', (_e, p) => cb(p)),
 
   // Per-song settings

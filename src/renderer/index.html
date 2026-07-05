@@ -183,13 +183,16 @@
       <div class="panel-title">
         Tracce separate (stem)
         <button id="separateBtn" class="btn" style="float:right;margin-top:-4px">✂️ Separa</button>
+        <label class="stem-model" style="float:right;margin:-2px 8px 0 0">Modello
+          <select id="stemModel"></select>
+        </label>
       </div>
       <div id="stemProgress" class="stem-progress" style="display:none">
         <div class="sp-track"><div id="stemBar" class="sp-fill"></div></div>
         <div id="stemProgressText" class="sp-text"></div>
       </div>
       <div id="stemMixer" class="mixer"></div>
-      <div id="stemHint" class="hint">Separa il brano in voce / batteria / basso / chitarra / piano / altro. La prima volta scarica il modello (~136&nbsp;MB) e su CPU richiede qualche minuto; la separazione gira in background (l'app resta utilizzabile) e il risultato viene messo in cache.</div>
+      <div id="stemHint" class="hint">Scegli il <b>Modello</b> e premi <b>Separa</b> per dividere il brano nelle sue tracce. La prima volta scarica il modello scelto (una sola volta); su CPU richiede qualche minuto e gira in background (l'app resta utilizzabile), poi il risultato viene messo in cache.</div>
     </section>
 
     <footer class="shortcuts">

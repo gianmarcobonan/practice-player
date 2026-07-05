@@ -41,16 +41,19 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
    - **Marker**: aggiungi segnaposto e cliccali per saltare alle sezioni.
    - **Metronomo**: BPM con *TAP*, **metrica** selezionabile (2/4, 3/4, 4/4, 5/4, 6/8, 7/8 — con
      accento sul primo battito) e *count-in* in battute prima del play (il click segue la velocità).
-   - **Separa**: divide in 6 stem (voce/batteria/basso/chitarra/piano/altro); poi muto/solo/volume
-     per ogni stem (es. muta la voce per il karaoke, o fai *solo* di uno strumento).
+   - **Separa**: scegli il **Modello** dal menu e dividi il brano in stem; poi muto/solo/volume
+     per ogni stem (es. muta la voce per il karaoke, o fai *solo* di uno strumento). Modelli:
+     **6 stem** (voce/batteria/basso/chitarra/piano/altro — veloce) o **4 stem alta qualità**
+     (htdemucs_ft, separazione migliore ma più lento e senza chitarra/piano).
 4. Le impostazioni (tonalità, velocità, loop, marker, ecc.) vengono **salvate per ogni brano**;
    i dati (impostazioni, cache degli stem e modello AI) stanno nel profilo utente
    (`%APPDATA%\Practice Player` su Windows, `~/.config/Practice Player` su Linux) e **restano
    anche dopo un aggiornamento** (il modello si scarica una sola volta).
 
 ### Note importanti sulla separazione stem
-- Al **primo uso** scarica il modello AI HT-Demucs 6 stem (~136 MB) una sola volta; resta nel
-  profilo utente (vedi sopra), quindi non viene più riscaricato nemmeno dopo un aggiornamento.
+- Al **primo uso di ciascun modello** ne scarica i pesi una sola volta (6 stem ~136 MB; 4 stem
+  alta qualità ~660 MB) — restano nel profilo utente (vedi sopra), quindi non vengono più
+  riscaricati nemmeno dopo un aggiornamento. Ogni modello ha la sua cache separata.
 - Su **CPU** la separazione richiede **diversi minuti per brano** (es. ~5× la durata). Il
   risultato viene messo in **cache** (indicizzata sul contenuto del brano), quindi la volta dopo
   è immediato.

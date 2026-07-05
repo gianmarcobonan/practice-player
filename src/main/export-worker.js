@@ -43,7 +43,7 @@ process.parentPort.on('message', async (e) => {
     let channels, total;
     const cache = useStems && cacheDir ? separate.readCache(cacheDir) : null;
     if (cache) {
-      const mixed = render.mixStems(cache, separate.SOURCES, settings.stemState || []);
+      const mixed = render.mixStems(cache, cache.sources, settings.stemState || []);
       channels = mixed.channels; total = mixed.total;
     } else {
       const dec = await decodeToPcm(filePath, { ffmpegPath });

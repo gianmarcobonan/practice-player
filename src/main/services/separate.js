@@ -1,11 +1,11 @@
 'use strict';
 
-// HT-Demucs 6-stem separation via onnxruntime-node.
-// Uses StemSplitio/htdemucs-6s-onnx: a SINGLE model that outputs all 6 sources
-// (drums, bass, other, vocals, guitar, piano) in one pass — faster than the old
-// 4-specialist bag and adds a dedicated guitar (and piano) stem. Chunked
-// overlap-add with a fade window. The model is lazily downloaded (fp16 weights,
-// ~136MB) and stems are cached to disk.
+// HT-Demucs stem separation via onnxruntime-node, driven by a model config
+// (see services/models.js). Every supported model shares the same ONNX contract
+// (input "mix" [1,2,N], output "stems" [1,S,2,N]) and chunk size, so this file is
+// model-agnostic: it downloads the model file(s), runs inference per chunk
+// (single model, or a "bag" of specialists), and reconstructs full-length stems
+// with a windowed overlap-add. Results are cached to disk.
 
 const fs = require('fs');
 const path = require('path');
@@ -13,19 +13,16 @@ const https = require('https');
 const os = require('os');
 const ort = require('onnxruntime-node');
 
-// Leave a couple of CPU cores free so playback/UI stay smooth while separating
-// (otherwise inference pegs every core and audio can stutter even off-thread).
+// Leave a couple of CPU cores free so playback/UI stay smooth while separating.
 const INFER_THREADS = Math.max(1, (os.cpus()?.length || 4) - 2);
 
 const SR = 44100;
 const CH = 2;
-const N = 343980;            // 7.8s segment
+const N = 343980;            // 7.8s segment (fixed by the models)
 const OVERLAP = (N / 4) | 0; // 85995
 const STRIDE = N - OVERLAP;  // 257985
-// Output source order of htdemucs_6s (fixed by the model).
-const SOURCES = ['drums', 'bass', 'other', 'vocals', 'guitar', 'piano'];
-const BASE = 'https://huggingface.co/StemSplitio/htdemucs-6s-onnx/resolve/main/';
-const MODEL_FILE = 'htdemucs_6s_fp16weights.onnx';
+const IN_NAME = 'mix';
+const OUT_NAME = 'stems';
 
 function makeWindow() {
   const w = new Float32Array(N).fill(1);
@@ -58,8 +55,7 @@ function download(url, dest, onProgress) {
       });
       res.pipe(file);
       file.on('finish', () => file.close(() => {
-        // Integrity guard: a truncated download must NOT be promoted to the final
-        // path, otherwise existsSync() would later skip re-downloading a corrupt model.
+        // Integrity guard: never promote a truncated download to the final path.
         if (total && done !== total) {
           try { fs.unlinkSync(tmp); } catch {}
           return reject(new Error(`Download incompleto (${done}/${total} byte) per ${path.basename(dest)}`));
@@ -73,43 +69,68 @@ function download(url, dest, onProgress) {
   });
 }
 
-async function ensureModels(modelDir, onProgress) {
+// Download every file the model needs into modelDir (skipped if already present
+// and plausibly sized). Reports { phase:'download', frac, fileIndex, nFiles }.
+async function ensureModels(modelDir, model, onProgress) {
   fs.mkdirSync(modelDir, { recursive: true });
-  const dest = path.join(modelDir, MODEL_FILE);
-  // Keep a previously downloaded model; only re-fetch if it's missing or
-  // implausibly small (the fp16 weights are >>1MB — a tiny file means a
-  // corrupt/partial leftover from an interrupted run).
-  if (fs.existsSync(dest) && fs.statSync(dest).size > 1_000_000) return;
-  await download(BASE + MODEL_FILE, dest, (frac) => {
-    if (onProgress) onProgress({ phase: 'download', stem: '6 stem', index: 0, frac });
-  });
+  const nFiles = model.files.length;
+  for (let i = 0; i < nFiles; i++) {
+    const f = model.files[i];
+    const dest = path.join(modelDir, f.name);
+    if (fs.existsSync(dest) && fs.statSync(dest).size > 1_000_000) continue;
+    await download(f.url, dest, (frac) => {
+      if (onProgress) onProgress({ phase: 'download', frac, fileIndex: i, nFiles });
+    });
+  }
 }
 
-let session = null;
-let sessionDir = null;
-async function loadSession(modelDir) {
-  if (session && sessionDir === modelDir) return session;
-  session = await ort.InferenceSession.create(
-    path.join(modelDir, MODEL_FILE),
-    {
-      executionProviders: ['cpu'],
-      graphOptimizationLevel: 'all',
-      intraOpNumThreads: INFER_THREADS,
-      interOpNumThreads: 1
-    }
-  );
-  sessionDir = modelDir;
-  return session;
+const sessionCache = new Map(); // key: modelDir|id -> InferenceSession[]
+async function loadSessions(modelDir, model) {
+  const key = modelDir + '|' + model.id;
+  if (sessionCache.has(key)) return sessionCache.get(key);
+  const opts = {
+    executionProviders: ['cpu'],
+    graphOptimizationLevel: 'all',
+    intraOpNumThreads: INFER_THREADS,
+    interOpNumThreads: 1
+  };
+  const sessions = [];
+  for (const f of model.files) {
+    sessions.push(await ort.InferenceSession.create(path.join(modelDir, f.name), opts));
+  }
+  sessionCache.set(key, sessions);
+  return sessions;
+}
+
+// Run one chunk through the model and return the S sources as a single
+// Float32Array laid out [src0 ch0 N | src0 ch1 N | src1 ch0 N | ...].
+async function runChunkStems(sessions, model, input) {
+  const tensor = new ort.Tensor('float32', input, [1, CH, N]);
+  if (model.type === 'single') {
+    const res = await sessions[0].run({ [IN_NAME]: tensor });
+    return res[OUT_NAME].data; // already [1, S, 2, N] flattened = S*CH*N
+  }
+  // bag: each specialist outputs [1, 4, 2, N]; take its `pick` row.
+  const S = model.sources.length;
+  const out = new Float32Array(S * CH * N);
+  for (let i = 0; i < sessions.length; i++) {
+    const res = await sessions[i].run({ [IN_NAME]: tensor });
+    const d = res[OUT_NAME].data;
+    const srcOff = model.files[i].pick * CH * N;
+    out.set(d.subarray(srcOff, srcOff + CH * N), i * CH * N);
+  }
+  return out;
 }
 
 // channels: [Float32Array L, Float32Array R], total = sample count.
-// Returns { drums:[L,R], bass:[L,R], other:[L,R], vocals:[L,R], guitar:[L,R], piano:[L,R] }.
-async function separateChannels(channels, total, modelDir, onProgress) {
-  const sess = await loadSession(modelDir);
+// Returns { <source>: [L, R] } for every source in model.sources.
+async function separateChannels(channels, total, modelDir, model, onProgress) {
+  const sessions = await loadSessions(modelDir, model);
+  const sources = model.sources;
   const window = makeWindow();
 
   const out = {};
-  for (const stem of SOURCES) out[stem] = [new Float32Array(total), new Float32Array(total)];
+  for (const stem of sources) out[stem] = [new Float32Array(total), new Float32Array(total)];
   const weight = new Float32Array(total);
 
   const nChunks = Math.max(1, Math.ceil(total / STRIDE));
@@ -123,14 +144,11 @@ async function separateChannels(channels, total, modelDir, onProgress) {
     input.fill(0);
     input.set(channels[0].subarray(start, end), 0);
     input.set(channels[1].subarray(start, end), N);
-    const tensor = new ort.Tensor('float32', input, [1, CH, N]);
 
-    // Single model run -> all 6 sources. Output 'stems' is [1, 6, 2, N].
-    const res = await sess.run({ mix: tensor });
-    const data = res.stems.data; // Float32Array (6*2*N)
-    for (let si = 0; si < SOURCES.length; si++) {
-      const stem = SOURCES[si];
-      const base = (si * CH) * N; // source si, channel 0 offset (batch dim = 1)
+    const data = await runChunkStems(sessions, model, input); // Float32Array (S*CH*N)
+    for (let si = 0; si < sources.length; si++) {
+      const stem = sources[si];
+      const base = (si * CH) * N; // source si, channel 0 offset
       const o0 = out[stem][0], o1 = out[stem][1];
       for (let k = 0; k < len; k++) {
         const w = window[k];
@@ -144,7 +162,7 @@ async function separateChannels(channels, total, modelDir, onProgress) {
 
   for (let k = 0; k < total; k++) {
     const wv = weight[k] > 1e-8 ? weight[k] : 1e-8;
-    for (const stem of SOURCES) {
+    for (const stem of sources) {
       out[stem][0][k] /= wv;
       out[stem][1][k] /= wv;
     }
@@ -152,31 +170,32 @@ async function separateChannels(channels, total, modelDir, onProgress) {
   return out;
 }
 
-// --- disk cache (raw interleaved f32 per stem) ---
-function writeCache(cacheDir, stems, total) {
+// --- disk cache (raw interleaved f32 per stem + meta with the source list) ---
+function writeCache(cacheDir, stems, total, sr, sources) {
   fs.mkdirSync(cacheDir, { recursive: true });
-  for (const stem of SOURCES) {
+  for (const stem of sources) {
     const inter = new Float32Array(total * 2);
     const [L, R] = stems[stem];
     for (let i = 0, k = 0; k < total; k++) { inter[i++] = L[k]; inter[i++] = R[k]; }
     fs.writeFileSync(path.join(cacheDir, `${stem}.f32`), Buffer.from(inter.buffer));
   }
-  fs.writeFileSync(path.join(cacheDir, 'meta.json'), JSON.stringify({ total, sr: SR }));
+  fs.writeFileSync(path.join(cacheDir, 'meta.json'), JSON.stringify({ total, sr: sr || SR, sources }));
 }
 
 function readCache(cacheDir) {
   const metaPath = path.join(cacheDir, 'meta.json');
   if (!fs.existsSync(metaPath)) return null;
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+  const sources = meta.sources || ['drums', 'bass', 'other', 'vocals', 'guitar', 'piano'];
   const stems = {};
-  for (const stem of SOURCES) {
+  for (const stem of sources) {
     const p = path.join(cacheDir, `${stem}.f32`);
     if (!fs.existsSync(p)) return null;
     const buf = fs.readFileSync(p);
     const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength);
     stems[stem] = new Float32Array(ab); // interleaved
   }
-  return { stems, total: meta.total };
+  return { stems, total: meta.total, sources, sr: meta.sr || SR };
 }
 
-module.exports = { SOURCES, SR, ensureModels, separateChannels, writeCache, readCache, makeWindow, N, STRIDE };
+module.exports = { SR, ensureModels, separateChannels, writeCache, readCache, makeWindow, N, STRIDE };

@@ -56,6 +56,7 @@ const els = {
   speedVal: document.getElementById('speedVal'),
   // stems
   separateBtn: document.getElementById('separateBtn'),
+  stemModel: document.getElementById('stemModel'),
   stemMixer: document.getElementById('stemMixer'),
   stemHint: document.getElementById('stemHint'),
   stemProgress: document.getElementById('stemProgress'),
@@ -110,6 +111,7 @@ let savedStemState = null;
 const STEM_LABELS = { drums: 'Batteria', bass: 'Basso', other: 'Altro', vocals: 'Voce', guitar: 'Chitarra', piano: 'Piano' };
 let currentFilePath = null;
 let currentProjectPath = null; // path of the open .ppx, so "Salva" overwrites it
+let currentModel = 'htdemucs_6s'; // selected stem-separation model
 let stemState = [];
 
 const player = new Player();
@@ -461,7 +463,7 @@ async function separateStems() {
     sepStart = 0;
     setStemBar(0, 'avvio separazione…', true);
     setStatus('separazione in corso…');
-    const payload = await window.api.separateStems(currentFilePath);
+    const payload = await window.api.separateStems(currentFilePath, currentModel);
     await player.loadStems(payload);
     buildMixer(payload.sources);
     updatePlayBtn();
@@ -477,12 +479,41 @@ async function separateStems() {
   }
 }
 
+// --- Stem-separation model picker ---
+let modelList = [];
+function setModel(id) {
+  if (!modelList.some((m) => m.id === id)) return;
+  currentModel = id;
+  if (els.stemModel) els.stemModel.value = id;
+  try { localStorage.setItem('stemModel', id); } catch {}
+  const m = modelList.find((x) => x.id === id);
+  if (m && els.stemModel) els.stemModel.title = m.note || '';
+}
+async function buildModelPicker() {
+  if (!window.api.listModels || !els.stemModel) return;
+  try { modelList = await window.api.listModels(); } catch { modelList = []; }
+  if (!modelList.length) return;
+  els.stemModel.innerHTML = '';
+  for (const m of modelList) {
+    const opt = document.createElement('option');
+    opt.value = m.id;
+    opt.textContent = m.label;
+    els.stemModel.appendChild(opt);
+  }
+  let saved = 'htdemucs_6s';
+  try { saved = localStorage.getItem('stemModel') || saved; } catch {}
+  if (!modelList.some((m) => m.id === saved)) saved = modelList[0].id;
+  setModel(saved);
+  els.stemModel.addEventListener('change', () => setModel(els.stemModel.value));
+}
+
 window.api.onStemProgress((p) => {
   if (p.phase === 'models') {
     setStemBar(0, 'preparazione modello AI…', true);
     setStatus('preparazione separazione…');
   } else if (p.phase === 'download') {
-    setStemBar(p.frac, `scarico modello AI… ${Math.round(p.frac * 100)}% (una sola volta)`, false);
+    const part = p.nFiles > 1 ? ` (file ${p.fileIndex + 1}/${p.nFiles})` : '';
+    setStemBar(p.frac, `scarico modello AI${part}… ${Math.round(p.frac * 100)}% (una sola volta)`, false);
     setStatus('scarico modello AI…');
   } else if (p.phase === 'separate') {
     if (!sepStart) { sepStart = performance.now(); sepStartChunk = p.chunk; }
@@ -588,7 +619,7 @@ async function saveProject(asNew) {
     els.saveProjectBtn.disabled = true;
     els.saveProjectAsBtn.disabled = true;
     setStatus(withStems ? 'salvataggio progetto (comprimo stem)…' : 'salvataggio progetto…');
-    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target, withStems);
+    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target, withStems, currentModel);
     if (saved) currentProjectPath = saved;
     setStatus(saved ? 'progetto salvato' : 'pronto');
   } catch (err) {
@@ -608,6 +639,9 @@ async function openProject(ppxPath) {
     await loadPath(res.mediaPath, res.settings);
     // Remember the .ppx so a later "Salva" overwrites it (set AFTER loadPath, which clears it).
     currentProjectPath = res.projectPath || null;
+    // Switch to the model the project's stems were made with (so re-separation and
+    // the picker match), then restore the stems.
+    if (res.stemModel) setModel(res.stemModel);
     // If the project carries stems (embedded in the .ppx, or a saved stem state),
     // restore them so the saved mute/solo/volume take effect. Instant when the
     // stems are embedded/cached; otherwise it re-separates with the progress bar.
@@ -633,6 +667,7 @@ async function exportMedia(mode) {
       mode,
       settings: gatherSettings(),
       useStems: stemState.length > 0,
+      modelId: currentModel,
       suggestedName: name
     });
     setStatus(out ? `esportato: ${out.split(/[\\/]/).pop()}` : 'pronto');
@@ -1135,6 +1170,7 @@ if (window.api.onAutoload) {
   updateAutoNormBtn();
   updateTuningAutoBtn();
   els.metroBpm.value = metro.bpm;
+  buildModelPicker();
   buildTuner();
   let savedTunerMode = 'beep';
   try { savedTunerMode = localStorage.getItem('tunerMode') || 'beep'; } catch {}

@@ -8,6 +8,7 @@ const { pathToFileURL } = require('url');
 const { decodeToPcm, hasVideoStream } = require('./services/decode');
 const youtube = require('./services/youtube');
 const separate = require('./services/separate');
+const models = require('./services/models');
 const project = require('./services/project');
 const stemsPack = require('./services/stems-pack');
 const updater = require('./services/updater');
@@ -34,30 +35,33 @@ function contentKeyFor(filePath) {
   });
 }
 
-async function stemCacheDir(filePath) {
-  return path.join(dataDir(), 'cache', 'stems', await contentKeyFor(filePath));
+// The stem cache is keyed by media content AND model id (different models give
+// different stems, so they must not collide).
+async function stemCacheDir(filePath, modelId) {
+  return path.join(dataDir(), 'cache', 'stems', (await contentKeyFor(filePath)) + '_' + modelId);
 }
 
 // Read the separated stems from the cache and encode each to Opus, ready to be
 // embedded in a .ppx. Returns null if this media has no (complete) stem cache.
-async function packStemsFromCache(mediaPath) {
-  const cacheDir = await stemCacheDir(mediaPath);
+async function packStemsFromCache(mediaPath, modelId) {
+  const cacheDir = await stemCacheDir(mediaPath, modelId);
   const metaPath = path.join(cacheDir, 'meta.json');
   if (!fs.existsSync(metaPath)) return null;
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+  const sources = meta.sources || [];
   const blobs = [];
-  for (const src of separate.SOURCES) {
+  for (const src of sources) {
     const f32 = path.join(cacheDir, `${src}.f32`);
     if (!fs.existsSync(f32)) return null; // incomplete cache — don't embed a partial set
     blobs.push({ name: src, buffer: await stemsPack.encodeOpus(ffmpegPath(), f32) });
   }
-  return { codec: 'opus', sources: separate.SOURCES, total: meta.total, sr: meta.sr, blobs };
+  return { codec: 'opus', model: modelId, sources, total: meta.total, sr: meta.sr, blobs };
 }
 
 // Decode stems embedded in a .ppx back into the stem cache, so the normal
 // separation flow finds them (instant) instead of re-running the model.
 async function unpackStemsToCache(mediaPath, stems) {
-  const cacheDir = await stemCacheDir(mediaPath);
+  const cacheDir = await stemCacheDir(mediaPath, stems.model || models.DEFAULT_MODEL);
   if (separate.readCache(cacheDir)) return; // already present
   fs.mkdirSync(cacheDir, { recursive: true });
   const bytes = stems.total * 2 * 4; // interleaved stereo f32
@@ -68,7 +72,8 @@ async function unpackStemsToCache(mediaPath, stems) {
     else if (f32.length < bytes) { const b = Buffer.alloc(bytes); f32.copy(b); f32 = b; }
     fs.writeFileSync(path.join(cacheDir, `${blob.name}.f32`), f32);
   }
-  fs.writeFileSync(path.join(cacheDir, 'meta.json'), JSON.stringify({ total: stems.total, sr: stems.sr }));
+  fs.writeFileSync(path.join(cacheDir, 'meta.json'),
+    JSON.stringify({ total: stems.total, sr: stems.sr, sources: stems.sources }));
 }
 
 // Extract a real file path from an argv array (used for the .ppx file
@@ -159,23 +164,26 @@ function runSeparationWorker(job, onProgress) {
   });
 }
 
-ipcMain.handle('stem:separate', async (evt, filePath) => {
-  const modelDir = path.join(dataDir(), 'models');
-  const cacheDir = await stemCacheDir(filePath);
+ipcMain.handle('models:list', () => models.publicList());
+
+ipcMain.handle('stem:separate', async (evt, filePath, modelId) => {
+  const model = models.getModel(modelId);
+  const modelDir = path.join(dataDir(), 'models', model.id);
+  const cacheDir = await stemCacheDir(filePath, model.id);
 
   if (!separate.readCache(cacheDir)) {
     await runSeparationWorker(
-      { filePath, ffmpegPath: ffmpegPath(), modelDir, cacheDir },
+      { filePath, ffmpegPath: ffmpegPath(), modelDir, cacheDir, model },
       (p) => evt.sender.send('stem:progress', p)
     );
   }
 
   const cached = separate.readCache(cacheDir);
-  return { sources: separate.SOURCES, total: cached.total, sampleRate: separate.SR, stems: cached.stems };
+  return { sources: cached.sources, total: cached.total, sampleRate: cached.sr, stems: cached.stems, model: model.id };
 });
 
 // --- Single-file project (.ppx): media + settings bundled together ---
-ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, targetPath, includeStems) => {
+ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, targetPath, includeStems, modelId) => {
   if (!mediaPath || !fs.existsSync(mediaPath)) throw new Error('Nessun brano da salvare.');
   // Overwrite the open project directly when a target path is given; otherwise
   // prompt for a location ("Salva con nome" / first save of a new project).
@@ -191,7 +199,7 @@ ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, 
     dest = res.filePath;
   }
   // Embed the separated stems (Opus) so the project is fully portable.
-  const stemPack = includeStems ? await packStemsFromCache(mediaPath) : null;
+  const stemPack = includeStems ? await packStemsFromCache(mediaPath, modelId || models.DEFAULT_MODEL) : null;
   await project.save(mediaPath, settings, dest, stemPack);
   return dest;
 });
@@ -214,7 +222,7 @@ ipcMain.handle('project:open', async (_evt, ppxPath) => {
     try { await unpackStemsToCache(mediaPath, stems); }
     catch (e) { console.error('STEM_UNPACK_ERROR', e); }
   }
-  return { mediaPath, settings, projectPath: p, hasStems: !!stems };
+  return { mediaPath, settings, projectPath: p, hasStems: !!stems, stemModel: stems ? (stems.model || models.DEFAULT_MODEL) : null };
 });
 
 // --- Export processed audio / audio+video ---
@@ -235,7 +243,7 @@ function runExportWorker(job, onProgress) {
 }
 
 ipcMain.handle('export:render', async (evt, opts) => {
-  const { filePath, mode, settings, useStems, suggestedName } = opts;
+  const { filePath, mode, settings, useStems, suggestedName, modelId } = opts;
   if (!filePath || !fs.existsSync(filePath)) throw new Error('Nessun brano caricato.');
   const isVideo = mode === 'video';
   const ext = isVideo ? 'mp4' : 'mp3';
@@ -247,7 +255,7 @@ ipcMain.handle('export:render', async (evt, opts) => {
   });
   if (res.canceled || !res.filePath) return null;
 
-  const cacheDir = await stemCacheDir(filePath);
+  const cacheDir = await stemCacheDir(filePath, modelId || models.DEFAULT_MODEL);
   await runExportWorker({
     filePath,
     ffmpegPath: ffmpegPath(),

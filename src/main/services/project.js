@@ -28,6 +28,7 @@ async function save(mediaPath, settings, outPath, stemPack) {
   const stat = fs.statSync(mediaPath);
   const stems = stemPack ? {
     codec: stemPack.codec,
+    model: stemPack.model,
     sources: stemPack.sources,
     total: stemPack.total,
     sr: stemPack.sr,
@@ -120,7 +121,7 @@ async function load(ppxPath, extractRoot) {
         blobs.push({ name: b.name, buffer: buf });
         offset += b.size;
       }
-      stems = { codec: meta.stems.codec, sources: meta.stems.sources, total: meta.stems.total, sr: meta.stems.sr, blobs };
+      stems = { codec: meta.stems.codec, model: meta.stems.model, sources: meta.stems.sources, total: meta.stems.total, sr: meta.stems.sr, blobs };
     } finally {
       fs.closeSync(fd);
     }

@@ -13,20 +13,20 @@ const post = (msg) => { try { process.parentPort.postMessage(msg); } catch {} };
 
 process.parentPort.on('message', async (e) => {
   const job = e.data || {};
-  const { filePath, ffmpegPath, modelDir, cacheDir } = job;
+  const { filePath, ffmpegPath, modelDir, cacheDir, model } = job;
   try {
     if (!separate.readCache(cacheDir)) {
       post({ type: 'progress', payload: { phase: 'models' } });
-      await separate.ensureModels(modelDir, (p) => post({ type: 'progress', payload: p }));
+      await separate.ensureModels(modelDir, model, (p) => post({ type: 'progress', payload: p }));
 
       const dec = await decodeToPcm(filePath, { ffmpegPath });
       const total = dec.frames;
       const L = new Float32Array(total), R = new Float32Array(total);
       for (let i = 0, k = 0; k < total; k++) { L[k] = dec.interleaved[i++]; R[k] = dec.interleaved[i++]; }
 
-      const stems = await separate.separateChannels([L, R], total, modelDir,
+      const stems = await separate.separateChannels([L, R], total, modelDir, model,
         (p) => post({ type: 'progress', payload: p }));
-      separate.writeCache(cacheDir, stems, total);
+      separate.writeCache(cacheDir, stems, total, model.sr || separate.SR, model.sources);
     }
     post({ type: 'done' });
   } catch (err) {
