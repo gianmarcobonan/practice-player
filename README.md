@@ -1,10 +1,16 @@
 # Practice Player
 
+[![Ultima release](https://img.shields.io/github/v/release/gianmarcobonan/practice-player?label=scarica&style=for-the-badge)](https://github.com/gianmarcobonan/practice-player/releases/latest)
+![Windows](https://img.shields.io/badge/Windows-10%2F11%2064--bit-blue?style=for-the-badge&logo=windows)
+
 App per Windows per esercitarsi suonando: cambia **tonalità** e **velocità** in tempo reale
 (indipendenti), separa le tracce in **stem**, riproduce **video tutorial** sincronizzati,
 scarica **audio o audio+video** da **YouTube**, con **loop A/B**, **marker**,
 **metronomo automatico**, suggerimento di **intonazione** e **memoria per brano**. Le sessioni
 si possono salvare in un **file unico di progetto** (`.ppx`) che racchiude media + impostazioni.
+
+> ### 📥 [**Scarica l'ultima versione**](https://github.com/gianmarcobonan/practice-player/releases/latest)
+> Windows 10/11 64-bit · scegli l'**Installer** (si auto-aggiorna) o la versione **Portable**.
 
 ## Installazione
 
@@ -15,8 +21,9 @@ Due modi:
 - **Portable** `PracticePlayer-<versione>-portable.exe` — nessuna installazione (anche da
   chiavetta), ma **non** si auto-aggiorna.
 
-Entrambi si scaricano dalla pagina **Releases** del repository. L'exe non è firmato (uso
-personale): Windows SmartScreen può avvisare al primo avvio → *Ulteriori informazioni → Esegui*.
+Entrambi si scaricano dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-player/releases/latest)**
+del repository. L'exe non è firmato (uso personale): Windows SmartScreen può avvisare al primo
+avvio → *Ulteriori informazioni → Esegui comunque*.
 
 ## Uso (per chi usa l'app)
 

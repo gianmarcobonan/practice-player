@@ -54,5 +54,10 @@ portable:
 # remote. Keeping it out of this file lets local `npm run build` succeed without
 # any repo info (and without generating an update feed).
 
+# Body of the published GitHub Release (download instructions, same for every
+# version). electron-builder reads this file and puts it in the release notes.
+releaseInfo:
+  releaseNotesFile: RELEASE_NOTES.md
+
 # We have not configured code signing (personal use).
 forceCodeSigning: false
