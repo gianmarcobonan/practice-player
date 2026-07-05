@@ -37,7 +37,8 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
      suggerisce; premi *Applica* per correggere.
    - **Loop A/B**: imposta A e B, attiva *Loop* per ripetere una sezione.
    - **Marker**: aggiungi segnaposto e cliccali per saltare alle sezioni.
-   - **Metronomo**: BPM con *TAP*, *count-in* prima del play (il click segue la velocità).
+   - **Metronomo**: BPM con *TAP*, **metrica** selezionabile (2/4, 3/4, 4/4, 5/4, 6/8, 7/8 — con
+     accento sul primo battito) e *count-in* in battute prima del play (il click segue la velocità).
    - **Separa**: divide in 6 stem (voce/batteria/basso/chitarra/piano/altro); poi muto/solo/volume
      per ogni stem (es. muta la voce per il karaoke, o fai *solo* di uno strumento).
 4. Le impostazioni (tonalità, velocità, loop, marker, ecc.) vengono **salvate per ogni brano**;
@@ -98,17 +99,17 @@ aggiornamento (`latest.yml` per Windows, `latest-linux.yml` per Linux).
 Per pubblicare una nuova versione:
 
 ```sh
-# 1. aggiorna il numero di versione in package.json (es. 1.0.2)
+# 1. aggiorna il numero di versione in package.json (es. X.Y.Z)
 # 2. crea e pusha il tag corrispondente (deve iniziare con "v")
-git commit -am "Release 1.0.2"
-git tag v1.0.2
+git commit -am "Release X.Y.Z"
+git tag vX.Y.Z
 git push origin main --tags
 ```
 
 L'app installata controlla il feed all'avvio (e ogni 6 ore): se c'è una versione più recente la
 **scarica in background** e mostra *Riavvia e aggiorna*; in ogni caso l'aggiornamento viene
-applicato alla chiusura. Il numero del tag (`v1.0.2`) deve combaciare con la versione in
-`package.json` (`1.0.2`). owner/repo del feed sono rilevati in automatico dal remote git.
+applicato alla chiusura. Il numero del tag (`vX.Y.Z`) deve combaciare con la versione in
+`package.json` (`X.Y.Z`). owner/repo del feed sono rilevati in automatico dal remote git.
 
 ## Note
 - I progetti `.ppx` si aprono con **doppio click**: l'installer Windows registra l'estensione
