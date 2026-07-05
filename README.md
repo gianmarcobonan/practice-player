@@ -40,8 +40,10 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
    - **Metronomo**: BPM con *TAP*, *count-in* prima del play (il click segue la velocità).
    - **Separa**: divide in voce/batteria/basso/altro; poi muto/solo/volume per ogni stem
      (es. muta la voce per il karaoke, o fai *solo* di uno strumento).
-4. Le impostazioni (tonalità, velocità, loop, marker, ecc.) vengono **salvate per ogni brano**
-   e i dati stanno nella cartella `data/` accanto all'eseguibile (funziona anche da chiavetta).
+4. Le impostazioni (tonalità, velocità, loop, marker, ecc.) vengono **salvate per ogni brano**;
+   i dati (impostazioni, cache degli stem e modello AI) stanno nel profilo utente
+   (`%APPDATA%\Practice Player` su Windows, `~/.config/Practice Player` su Linux) e **restano
+   anche dopo un aggiornamento** (il modello si scarica una sola volta).
 
 ### Note importanti sulla separazione stem
 - Al **primo uso** scarica il modello AI HT-Demucs (~630 MB) una sola volta in `data/models/`.

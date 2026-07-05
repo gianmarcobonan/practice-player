@@ -24,22 +24,17 @@ const EXE = process.platform === 'win32' ? '.exe' : '';
 const ffmpegPath = () => binPath('ffmpeg' + EXE);
 const ytDlpPath = () => binPath('yt-dlp' + EXE);
 
-// Writable data dir for per-song settings and stem cache.
-// - Windows installed: next to the .exe (also handles the old portable build).
-// - Linux (AppImage) / macOS: the app runs from a read-only mount, so we can't
-//   write next to the exe — use the per-user data dir instead.
-// - Dev: project root /data.
+// Writable data dir for the AI model, stem cache and per-song settings.
+// Packaged (Windows installer / Linux AppImage): a stable per-user dir
+// (%APPDATA%\Practice Player on Windows, ~/.config/Practice Player on Linux).
+// This SURVIVES auto-updates and reinstalls — previously data lived next to the
+// .exe, inside the install folder, which the NSIS updater wipes on every update,
+// forcing the ~136MB model to be re-downloaded. Now it's fetched only once, ever.
+// Dev: the project root.
 function dataDir() {
-  let base;
-  if (process.env.PORTABLE_EXECUTABLE_DIR) {
-    base = process.env.PORTABLE_EXECUTABLE_DIR;
-  } else if (app.isPackaged && process.platform === 'win32') {
-    base = path.dirname(app.getPath('exe'));
-  } else if (app.isPackaged) {
-    base = app.getPath('userData');
-  } else {
-    base = path.join(__dirname, '..', '..');
-  }
+  const base = app.isPackaged
+    ? app.getPath('userData')
+    : path.join(__dirname, '..', '..');
   const dir = path.join(base, 'data');
   fs.mkdirSync(dir, { recursive: true });
   return dir;
