@@ -79,6 +79,7 @@ const els = {
   metroTap: document.getElementById('metroTap'),
   metroHalf: document.getElementById('metroHalf'),
   metroDouble: document.getElementById('metroDouble'),
+  metroSig: document.getElementById('metroSig'),
   countIn: document.getElementById('countIn'),
   // tuner
   tunerKeys: document.getElementById('tunerKeys'),
@@ -387,6 +388,7 @@ function gatherSettings() {
     stemState,
     metro: {
       bpm: metro.bpm,
+      beatsPerBar: metro.beatsPerBar,
       countIn: parseInt(els.countIn.value, 10) || 0
     }
   };
@@ -417,6 +419,8 @@ async function applySettings(s) {
     if (s.metro) {
       metro.setBpm(s.metro.bpm || 120);
       els.metroBpm.value = metro.bpm;
+      metro.setBeatsPerBar(s.metro.beatsPerBar || 4);
+      els.metroSig.value = String(metro.beatsPerBar);
       els.countIn.value = String(s.metro.countIn || 0);
     }
     savedStemState = Array.isArray(s.stemState) ? s.stemState : null;
@@ -882,7 +886,8 @@ async function togglePlay() {
   if (!player.loaded) return;
   if (player.isPlaying) { player.pause(); videoPause(); updatePlayBtn(); return; }
   if (player.ctx.state === 'suspended') await player.ctx.resume();
-  const beats = parseInt(els.countIn.value, 10) || 0;
+  const bars = parseInt(els.countIn.value, 10) || 0;
+  const beats = bars * metro.beatsPerBar;
   if (beats > 0) {
     const delay = metro.countIn(beats);
     els.playBtn.disabled = true;
@@ -954,6 +959,7 @@ els.metroBpm.addEventListener('change', () => {
   scheduleSave();
 });
 els.metroTap.addEventListener('click', () => { els.metroBpm.value = Math.round(metro.tap()); scheduleSave(); });
+els.metroSig.addEventListener('change', () => { metro.setBeatsPerBar(parseInt(els.metroSig.value, 10) || 4); scheduleSave(); });
 els.countIn.addEventListener('change', scheduleSave);
 els.metroHalf.addEventListener('click', () => { els.metroBpm.value = metro.setBpm(metro.bpm / 2); scheduleSave(); });
 els.metroDouble.addEventListener('click', () => { els.metroBpm.value = metro.setBpm(metro.bpm * 2); scheduleSave(); });

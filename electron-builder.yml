@@ -6,6 +6,16 @@ directories:
   output: dist
   buildResources: build
 
+# Associate .ppx project files with the app: the NSIS installer registers the
+# extension on Windows (double-click opens Practice Player); on Linux it adds a
+# MIME type + desktop entry. The app receives the path on the command line and
+# auto-loads it (see fileArg/second-instance in src/main/main.js).
+fileAssociations:
+  - ext: ppx
+    name: Practice Player Project
+    description: Progetto Practice Player
+    role: Editor
+
 files:
   - src/**/*
   - package.json

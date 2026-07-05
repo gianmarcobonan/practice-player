@@ -27,6 +27,9 @@ export class Metronome {
 
   setBpm(b) { this.bpm = clamp(Math.round(b), 30, 300); return this.bpm; }
 
+  // Beats per bar = numerator of the time signature (accent on beat 1).
+  setBeatsPerBar(n) { this.beatsPerBar = clamp(Math.round(n), 1, 12); this._beat = 0; return this.beatsPerBar; }
+
   // Set the detected beat grid (keeps bpm in sync for display/count-in).
   setBeatGrid(grid) {
     this.grid = grid ? { firstBeat: grid.firstBeat, period: grid.period } : null;

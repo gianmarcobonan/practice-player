@@ -19,13 +19,18 @@ function cacheKeyFor(filePath) {
     .digest('hex').slice(0, 16);
 }
 
-// A file path can be passed on the command line (used for testing/auto-load).
-function fileArg() {
-  const args = process.argv.slice(app.isPackaged ? 1 : 2);
-  for (const a of args) {
+// Extract a real file path from an argv array (used for the .ppx file
+// association, drag-onto-icon, and command-line auto-load/testing).
+function fileArgFrom(argv, skip) {
+  for (const a of argv.slice(skip)) {
     if (a && !a.startsWith('-') && fs.existsSync(a) && fs.statSync(a).isFile()) return a;
   }
   return null;
+}
+
+// This process's launch argument (exe is argv[0] when packaged, node+script in dev).
+function fileArg() {
+  return fileArgFrom(process.argv, app.isPackaged ? 1 : 2);
 }
 
 // --- Basic IPC ---
@@ -271,14 +276,28 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
-  createWindow();
-  updater.initAutoUpdate(() => mainWindow);
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+// Single instance: double-clicking a .ppx while the app is already open should
+// focus the existing window and load that file, not spawn a second copy.
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_e, argv) => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    const f = fileArgFrom(argv, 1); // second instance is always the packaged exe
+    if (f) mainWindow.webContents.send('app:autoload', { filePath: f });
   });
-});
+
+  app.whenReady().then(() => {
+    createWindow();
+    updater.initAutoUpdate(() => mainWindow);
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 // Renderer asks to restart into the freshly downloaded update.
 ipcMain.handle('update:install', () => updater.installUpdate());

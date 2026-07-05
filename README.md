@@ -111,6 +111,9 @@ applicato alla chiusura. Il numero del tag (`v1.0.2`) deve combaciare con la ver
 `package.json` (`1.0.2`). owner/repo del feed sono rilevati in automatico dal remote git.
 
 ## Note
+- I progetti `.ppx` si aprono con **doppio click**: l'installer Windows registra l'estensione
+  (su Linux dipende dall'integrazione dell'AppImage nel sistema). Se l'app è già aperta, il file
+  viene caricato nella finestra esistente.
 - Il download da YouTube è pensato per uso personale; è tecnicamente contro i ToS di YouTube.
 - L'app non è firmata (uso personale): su Windows SmartScreen potrebbe avvisare al primo avvio.
 - Su Linux l'`.AppImage` va reso eseguibile (`chmod +x`) prima del primo avvio.
