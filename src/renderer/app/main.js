@@ -10,6 +10,7 @@ const els = {
   openBtn: document.getElementById('openBtn'),
   openProjectBtn: document.getElementById('openProjectBtn'),
   saveProjectBtn: document.getElementById('saveProjectBtn'),
+  saveProjectAsBtn: document.getElementById('saveProjectAsBtn'),
   exportMp3Btn: document.getElementById('exportMp3Btn'),
   exportMp4Btn: document.getElementById('exportMp4Btn'),
   ytUrl: document.getElementById('ytUrl'),
@@ -103,6 +104,7 @@ let savedStemState = null;
 
 const STEM_LABELS = { drums: 'Batteria', bass: 'Basso', other: 'Altro', vocals: 'Voce', guitar: 'Chitarra', piano: 'Piano' };
 let currentFilePath = null;
+let currentProjectPath = null; // path of the open .ppx, so "Salva" overwrites it
 let stemState = [];
 
 const player = new Player();
@@ -499,9 +501,11 @@ async function loadPath(filePath, presetSettings) {
     setStatus('decodifica in corso…');
     els.transport.classList.add('busy');
     els.saveProjectBtn.disabled = true;
+    els.saveProjectAsBtn.disabled = true;
     els.exportMp3Btn.disabled = true;
     els.exportMp4Btn.disabled = true;
     currentFilePath = filePath;
+    currentProjectPath = null; // a plain media load isn't tied to a .ppx yet (openProject sets it after)
     resetMixer();
     loop.a = loop.b = null; loop.on = false; applyLoop();
     markers = []; renderMarkers();
@@ -547,6 +551,7 @@ async function loadPath(filePath, presetSettings) {
     }
 
     els.saveProjectBtn.disabled = false;
+    els.saveProjectAsBtn.disabled = false;
     els.exportMp3Btn.disabled = false;
     els.exportMp4Btn.disabled = !hasVideo;
     setStatus('pronto');
@@ -566,19 +571,26 @@ async function openFile() {
 }
 
 // Save the current media (audio or audio+video) + all settings into one .ppx file.
-async function saveProject() {
+// "Salva" overwrites the open project (or asks a name the first time); "Salva con
+// nome" (asNew=true) always asks for a new file and switches to it.
+async function saveProject(asNew) {
   if (!currentFilePath) { setStatus('nessun brano da salvare'); return; }
   const name = (els.songName.textContent || 'progetto').replace(/\.[^.]+$/, '');
+  // When overwriting, target the open .ppx (no dialog); otherwise pass null to prompt.
+  const target = asNew ? null : currentProjectPath;
   try {
     els.saveProjectBtn.disabled = true;
+    els.saveProjectAsBtn.disabled = true;
     setStatus('salvataggio progetto…');
-    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name);
+    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target);
+    if (saved) currentProjectPath = saved;
     setStatus(saved ? 'progetto salvato' : 'pronto');
   } catch (err) {
     setStatus('errore salvataggio: ' + err.message);
     console.error('PROJECT_SAVE_ERROR', err);
   } finally {
     els.saveProjectBtn.disabled = !currentFilePath;
+    els.saveProjectAsBtn.disabled = !currentFilePath;
   }
 }
 
@@ -588,6 +600,8 @@ async function openProject(ppxPath) {
     const res = await window.api.openProject(ppxPath);
     if (!res) { setStatus('pronto'); return; }
     await loadPath(res.mediaPath, res.settings);
+    // Remember the .ppx so a later "Salva" overwrites it (set AFTER loadPath, which clears it).
+    currentProjectPath = res.projectPath || null;
   } catch (err) {
     setStatus('errore apertura progetto: ' + err.message);
     console.error('PROJECT_OPEN_ERROR', err);
@@ -909,7 +923,8 @@ async function togglePlay() {
 // --- Wiring ---
 els.openBtn.addEventListener('click', openFile);
 els.openProjectBtn.addEventListener('click', () => openProject());
-els.saveProjectBtn.addEventListener('click', saveProject);
+els.saveProjectBtn.addEventListener('click', () => saveProject(false));
+els.saveProjectAsBtn.addEventListener('click', () => saveProject(true));
 els.exportMp3Btn.addEventListener('click', () => exportMedia('mp3'));
 els.exportMp4Btn.addEventListener('click', () => exportMedia('video'));
 els.volSlider.addEventListener('input', () => { state.volume = parseInt(els.volSlider.value, 10) / 100; applyVolume(); });

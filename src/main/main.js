@@ -124,17 +124,23 @@ ipcMain.handle('stem:separate', async (evt, filePath) => {
 });
 
 // --- Single-file project (.ppx): media + settings bundled together ---
-ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName) => {
+ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, targetPath) => {
   if (!mediaPath || !fs.existsSync(mediaPath)) throw new Error('Nessun brano da salvare.');
-  const base = (suggestedName || 'progetto').replace(/[\\/:*?"<>|]+/g, '_');
-  const res = await dialog.showSaveDialog(mainWindow, {
-    title: 'Salva progetto',
-    defaultPath: base + '.ppx',
-    filters: [{ name: 'Progetto Practice Player', extensions: ['ppx'] }]
-  });
-  if (res.canceled || !res.filePath) return null;
-  await project.save(mediaPath, settings, res.filePath);
-  return res.filePath;
+  // Overwrite the open project directly when a target path is given; otherwise
+  // prompt for a location ("Salva con nome" / first save of a new project).
+  let dest = targetPath;
+  if (!dest) {
+    const base = (suggestedName || 'progetto').replace(/[\\/:*?"<>|]+/g, '_');
+    const res = await dialog.showSaveDialog(mainWindow, {
+      title: 'Salva progetto',
+      defaultPath: base + '.ppx',
+      filters: [{ name: 'Progetto Practice Player', extensions: ['ppx'] }]
+    });
+    if (res.canceled || !res.filePath) return null;
+    dest = res.filePath;
+  }
+  await project.save(mediaPath, settings, dest);
+  return dest;
 });
 
 ipcMain.handle('project:open', async (_evt, ppxPath) => {
@@ -149,7 +155,7 @@ ipcMain.handle('project:open', async (_evt, ppxPath) => {
     p = res.filePaths[0];
   }
   const { mediaPath, settings } = await project.load(p, path.join(dataDir(), 'projects'));
-  return { mediaPath, settings };
+  return { mediaPath, settings, projectPath: p };
 });
 
 // --- Export processed audio / audio+video ---

@@ -29,7 +29,9 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
 1. Avvia l'app (installer Windows o AppImage Linux).
 2. **Apri brano** (mp3, m4a, wav, flac, ogg…) o **Apri progetto** (`.ppx`), oppure incolla un
    **link YouTube** e premi *Scarica* (chiede *solo audio* o *audio+video* per i video tutorial).
-   Con *Salva progetto* esporti media + impostazioni in un unico file `.ppx`.
+   *Salva progetto* racchiude media + impostazioni in un unico file `.ppx`: se il progetto è già
+   stato salvato (o aperto da `.ppx`) **sovrascrive** quel file senza chiedere, mentre *Salva con
+   nome…* crea sempre un nuovo `.ppx` e ci si sposta sopra.
 3. Controlli principali:
    - **Tonalità**: `− ½ tono` / `+ ½ tono` (la velocità non cambia).
    - **Velocità**: preset (−50%…+10%) o barra fine ±1% (la tonalità non cambia).
