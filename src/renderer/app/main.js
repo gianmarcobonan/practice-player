@@ -116,7 +116,8 @@ let savedStemState = null;
 const STEM_LABELS = { drums: 'Batteria', bass: 'Basso', other: 'Altro', vocals: 'Voce', guitar: 'Chitarra', piano: 'Piano', instrumental: 'Strumentale' };
 let currentFilePath = null;
 let currentProjectPath = null; // path of the open .ppx, so "Salva" overwrites it
-let currentModel = 'htdemucs_6s'; // selected stem-separation model
+let currentModel = 'htdemucs_6s'; // model selected for the NEXT separation
+let loadedStemModel = null;       // model whose stems are currently in the mixer
 let stemState = [];
 
 const player = new Player();
@@ -470,6 +471,7 @@ async function separateStems() {
     setStatus('separazione in corso…');
     const payload = await window.api.separateStems(currentFilePath, currentModel);
     await player.loadStems(payload);
+    loadedStemModel = payload.model || currentModel;
     buildMixer(payload.sources);
     updatePlayBtn();
     hideStemBar();
@@ -509,7 +511,13 @@ async function buildModelPicker() {
   try { saved = localStorage.getItem('stemModel') || saved; } catch {}
   if (!modelList.some((m) => m.id === saved)) saved = modelList[0].id;
   setModel(saved);
-  els.stemModel.addEventListener('change', () => setModel(els.stemModel.value));
+  els.stemModel.addEventListener('change', () => {
+    setModel(els.stemModel.value);
+    // Stems already loaded from another model? Remind the user to re-run Separa.
+    if (loadedStemModel && loadedStemModel !== currentModel) {
+      setStatus('premi "Separa" per riseparare con il nuovo modello');
+    }
+  });
 }
 
 window.api.onStemProgress((p) => {
@@ -547,6 +555,7 @@ async function loadPath(filePath, presetSettings) {
     els.exportMp4Btn.disabled = true;
     currentFilePath = filePath;
     currentProjectPath = null; // a plain media load isn't tied to a .ppx yet (openProject sets it after)
+    loadedStemModel = null;    // no stems loaded for the new track yet
     resetMixer();
     loop.a = loop.b = null; loop.on = false; applyLoop();
     markers = []; renderMarkers();
@@ -654,7 +663,7 @@ async function saveProject(asNew) {
     // Saving with stems compresses them to Opus (several seconds) — block the UI
     // with a clear "please wait" overlay so the user doesn't force-quit.
     if (withStems) showBusy('Salvataggio progetto…', 'Comprimo gli stem e scrivo il file. Non chiudere l\'app.', true);
-    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target, withStems, currentModel);
+    const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target, withStems, loadedStemModel || currentModel);
     if (saved) currentProjectPath = saved;
     setStatus(saved ? 'progetto salvato' : 'pronto');
   } catch (err) {
@@ -707,7 +716,7 @@ async function exportMedia(mode) {
       mode,
       settings: gatherSettings(),
       useStems: stemState.length > 0,
-      modelId: currentModel,
+      modelId: loadedStemModel || currentModel,
       suggestedName: name
     });
     setStatus(out ? `esportato: ${out.split(/[\\/]/).pop()}` : 'pronto');
