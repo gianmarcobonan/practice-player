@@ -110,6 +110,16 @@ async function runChunkStems(sessions, model, input) {
     const res = await sessions[0].run({ [IN_NAME]: tensor });
     return res[OUT_NAME].data; // already [1, S, 2, N] flattened = S*CH*N
   }
+  if (model.type === 'vocals-split') {
+    // 2 sources: vocals (the specialist's `pick` row) and instrumental (mix - vocals).
+    const res = await sessions[0].run({ [IN_NAME]: tensor });
+    const d = res[OUT_NAME].data;
+    const vOff = model.files[0].pick * CH * N;
+    const out = new Float32Array(2 * CH * N);
+    out.set(d.subarray(vOff, vOff + CH * N), 0);           // slot 0: vocals
+    for (let c = 0; c < CH * N; c++) out[CH * N + c] = input[c] - d[vOff + c]; // slot 1: instrumental
+    return out;
+  }
   // bag: each specialist outputs [1, 4, 2, N]; take its `pick` row.
   const S = model.sources.length;
   const out = new Float32Array(S * CH * N);

@@ -37,6 +37,19 @@ const MODELS = [
       { name: 'htdemucs_ft_other_fp16weights.onnx',  url: HF + 'htdemucs-ft-other-onnx/resolve/main/htdemucs_ft_other_fp16weights.onnx',   pick: 2 },
       { name: 'htdemucs_ft_vocals_fp16weights.onnx', url: HF + 'htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx', pick: 3 }
     ]
+  },
+  {
+    id: 'karaoke',
+    label: 'Karaoke — voce / strumentale',
+    note: 'Rimozione voce dedicata (specialista fine-tuned): solo 2 tracce (voce e strumentale) ma pulita e veloce. Scarica ~166 MB al primo uso.',
+    sizeMB: 166,
+    type: 'vocals-split',
+    sources: ['vocals', 'instrumental'],
+    files: [
+      // The vocals specialist outputs [1,4,2,N]; take its vocals row (3). The
+      // instrumental is derived as (mix - vocals) in separate.js.
+      { name: 'htdemucs_ft_vocals_fp16weights.onnx', url: HF + 'htdemucs-ft-vocals-onnx/resolve/main/htdemucs_ft_vocals_fp16weights.onnx', pick: 3 }
+    ]
   }
 ];
 

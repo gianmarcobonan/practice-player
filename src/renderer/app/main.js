@@ -11,6 +11,11 @@ const els = {
   openProjectBtn: document.getElementById('openProjectBtn'),
   saveProjectBtn: document.getElementById('saveProjectBtn'),
   saveProjectAsBtn: document.getElementById('saveProjectAsBtn'),
+  busyOverlay: document.getElementById('busyOverlay'),
+  busyTitle: document.getElementById('busyTitle'),
+  busyDetail: document.getElementById('busyDetail'),
+  busyProgress: document.getElementById('busyProgress'),
+  busyBar: document.getElementById('busyBar'),
   exportMp3Btn: document.getElementById('exportMp3Btn'),
   exportMp4Btn: document.getElementById('exportMp4Btn'),
   ytUrl: document.getElementById('ytUrl'),
@@ -108,7 +113,7 @@ let applying = false;
 let saveTimer = null;
 let savedStemState = null;
 
-const STEM_LABELS = { drums: 'Batteria', bass: 'Basso', other: 'Altro', vocals: 'Voce', guitar: 'Chitarra', piano: 'Piano' };
+const STEM_LABELS = { drums: 'Batteria', bass: 'Basso', other: 'Altro', vocals: 'Voce', guitar: 'Chitarra', piano: 'Piano', instrumental: 'Strumentale' };
 let currentFilePath = null;
 let currentProjectPath = null; // path of the open .ppx, so "Salva" overwrites it
 let currentModel = 'htdemucs_6s'; // selected stem-separation model
@@ -606,6 +611,33 @@ async function openFile() {
   if (filePath) await loadPath(filePath);
 }
 
+// --- Blocking "please wait" overlay for long save/open (so the user doesn't
+// think the app is frozen and force-quit mid-operation). ---
+function showBusy(title, detail, withBar) {
+  els.busyTitle.textContent = title;
+  els.busyDetail.textContent = detail || 'Non chiudere l\'app.';
+  els.busyProgress.style.display = withBar ? '' : 'none';
+  els.busyBar.style.width = '0%';
+  els.busyOverlay.style.display = '';
+}
+function updateBusy(detail, frac) {
+  if (detail != null) els.busyDetail.textContent = detail;
+  if (frac != null) { els.busyProgress.style.display = ''; els.busyBar.style.width = `${Math.round(frac * 100)}%`; }
+}
+function hideBusy() { els.busyOverlay.style.display = 'none'; }
+
+if (window.api.onProjectProgress) {
+  window.api.onProjectProgress((p) => {
+    if (!p) return;
+    if (p.phase === 'save') {
+      if (p.writing) updateBusy('Scrivo il file del progetto…');
+      else if (p.total) updateBusy(`Comprimo gli stem… ${p.step}/${p.total}`, p.step / p.total);
+    } else if (p.phase === 'open' && p.total) {
+      updateBusy(`Estraggo gli stem dal progetto… ${p.step}/${p.total}`, p.step / p.total);
+    }
+  });
+}
+
 // Save the current media (audio or audio+video) + all settings into one .ppx file.
 // "Salva" overwrites the open project (or asks a name the first time); "Salva con
 // nome" (asNew=true) always asks for a new file and switches to it.
@@ -619,6 +651,9 @@ async function saveProject(asNew) {
     els.saveProjectBtn.disabled = true;
     els.saveProjectAsBtn.disabled = true;
     setStatus(withStems ? 'salvataggio progetto (comprimo stem)…' : 'salvataggio progetto…');
+    // Saving with stems compresses them to Opus (several seconds) — block the UI
+    // with a clear "please wait" overlay so the user doesn't force-quit.
+    if (withStems) showBusy('Salvataggio progetto…', 'Comprimo gli stem e scrivo il file. Non chiudere l\'app.', true);
     const saved = await window.api.saveProject(currentFilePath, gatherSettings(), name, target, withStems, currentModel);
     if (saved) currentProjectPath = saved;
     setStatus(saved ? 'progetto salvato' : 'pronto');
@@ -626,16 +661,19 @@ async function saveProject(asNew) {
     setStatus('errore salvataggio: ' + err.message);
     console.error('PROJECT_SAVE_ERROR', err);
   } finally {
+    hideBusy();
     els.saveProjectBtn.disabled = !currentFilePath;
     els.saveProjectAsBtn.disabled = !currentFilePath;
   }
 }
 
 async function openProject(ppxPath) {
+  showBusy('Apertura progetto…', 'Attendi, non chiudere l\'app.');
   try {
     setStatus('apertura progetto…');
     const res = await window.api.openProject(ppxPath);
     if (!res) { setStatus('pronto'); return; }
+    updateBusy('Carico il brano…');
     await loadPath(res.mediaPath, res.settings);
     // Remember the .ppx so a later "Salva" overwrites it (set AFTER loadPath, which clears it).
     currentProjectPath = res.projectPath || null;
@@ -645,10 +683,12 @@ async function openProject(ppxPath) {
     // If the project carries stems (embedded in the .ppx, or a saved stem state),
     // restore them so the saved mute/solo/volume take effect. Instant when the
     // stems are embedded/cached; otherwise it re-separates with the progress bar.
-    if (res.hasStems || (savedStemState && savedStemState.length)) await separateStems();
+    if (res.hasStems || (savedStemState && savedStemState.length)) { updateBusy('Ripristino gli stem…'); await separateStems(); }
   } catch (err) {
     setStatus('errore apertura progetto: ' + err.message);
     console.error('PROJECT_OPEN_ERROR', err);
+  } finally {
+    hideBusy();
   }
 }
 

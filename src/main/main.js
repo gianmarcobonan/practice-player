@@ -43,29 +43,32 @@ async function stemCacheDir(filePath, modelId) {
 
 // Read the separated stems from the cache and encode each to Opus, ready to be
 // embedded in a .ppx. Returns null if this media has no (complete) stem cache.
-async function packStemsFromCache(mediaPath, modelId) {
+async function packStemsFromCache(mediaPath, modelId, onProgress) {
   const cacheDir = await stemCacheDir(mediaPath, modelId);
   const metaPath = path.join(cacheDir, 'meta.json');
   if (!fs.existsSync(metaPath)) return null;
   const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
   const sources = meta.sources || [];
   const blobs = [];
-  for (const src of sources) {
-    const f32 = path.join(cacheDir, `${src}.f32`);
+  for (let i = 0; i < sources.length; i++) {
+    const f32 = path.join(cacheDir, `${sources[i]}.f32`);
     if (!fs.existsSync(f32)) return null; // incomplete cache — don't embed a partial set
-    blobs.push({ name: src, buffer: await stemsPack.encodeOpus(ffmpegPath(), f32) });
+    if (onProgress) onProgress({ step: i + 1, total: sources.length });
+    blobs.push({ name: sources[i], buffer: await stemsPack.encodeOpus(ffmpegPath(), f32) });
   }
   return { codec: 'opus', model: modelId, sources, total: meta.total, sr: meta.sr, blobs };
 }
 
 // Decode stems embedded in a .ppx back into the stem cache, so the normal
 // separation flow finds them (instant) instead of re-running the model.
-async function unpackStemsToCache(mediaPath, stems) {
+async function unpackStemsToCache(mediaPath, stems, onProgress) {
   const cacheDir = await stemCacheDir(mediaPath, stems.model || models.DEFAULT_MODEL);
   if (separate.readCache(cacheDir)) return; // already present
   fs.mkdirSync(cacheDir, { recursive: true });
   const bytes = stems.total * 2 * 4; // interleaved stereo f32
-  for (const blob of stems.blobs) {
+  for (let bi = 0; bi < stems.blobs.length; bi++) {
+    const blob = stems.blobs[bi];
+    if (onProgress) onProgress({ step: bi + 1, total: stems.blobs.length });
     let f32 = await stemsPack.decodeOpus(ffmpegPath(), blob.buffer);
     // Opus resampling can drift by a few samples — force exactly `total` frames.
     if (f32.length > bytes) f32 = f32.subarray(0, bytes);
@@ -183,7 +186,7 @@ ipcMain.handle('stem:separate', async (evt, filePath, modelId) => {
 });
 
 // --- Single-file project (.ppx): media + settings bundled together ---
-ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, targetPath, includeStems, modelId) => {
+ipcMain.handle('project:save', async (evt, mediaPath, settings, suggestedName, targetPath, includeStems, modelId) => {
   if (!mediaPath || !fs.existsSync(mediaPath)) throw new Error('Nessun brano da salvare.');
   // Overwrite the open project directly when a target path is given; otherwise
   // prompt for a location ("Salva con nome" / first save of a new project).
@@ -199,12 +202,16 @@ ipcMain.handle('project:save', async (_evt, mediaPath, settings, suggestedName, 
     dest = res.filePath;
   }
   // Embed the separated stems (Opus) so the project is fully portable.
-  const stemPack = includeStems ? await packStemsFromCache(mediaPath, modelId || models.DEFAULT_MODEL) : null;
+  const stemPack = includeStems
+    ? await packStemsFromCache(mediaPath, modelId || models.DEFAULT_MODEL,
+        (p) => evt.sender.send('project:progress', { phase: 'save', ...p }))
+    : null;
+  evt.sender.send('project:progress', { phase: 'save', writing: true });
   await project.save(mediaPath, settings, dest, stemPack);
   return dest;
 });
 
-ipcMain.handle('project:open', async (_evt, ppxPath) => {
+ipcMain.handle('project:open', async (evt, ppxPath) => {
   let p = ppxPath;
   if (!p) {
     const res = await dialog.showOpenDialog(mainWindow, {
@@ -219,7 +226,7 @@ ipcMain.handle('project:open', async (_evt, ppxPath) => {
   // Restore embedded stems into the cache so opening the project loads them
   // instantly (no re-separation), on this or any other machine.
   if (stems) {
-    try { await unpackStemsToCache(mediaPath, stems); }
+    try { await unpackStemsToCache(mediaPath, stems, (pr) => evt.sender.send('project:progress', { phase: 'open', ...pr })); }
     catch (e) { console.error('STEM_UNPACK_ERROR', e); }
   }
   return { mediaPath, settings, projectPath: p, hasStems: !!stems, stemModel: stems ? (stems.model || models.DEFAULT_MODEL) : null };

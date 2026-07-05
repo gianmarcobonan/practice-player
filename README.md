@@ -43,8 +43,9 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
      accento sul primo battito) e *count-in* in battute prima del play (il click segue la velocità).
    - **Separa**: scegli il **Modello** dal menu e dividi il brano in stem; poi muto/solo/volume
      per ogni stem (es. muta la voce per il karaoke, o fai *solo* di uno strumento). Modelli:
-     **6 stem** (voce/batteria/basso/chitarra/piano/altro — veloce) o **4 stem alta qualità**
-     (htdemucs_ft, separazione migliore ma più lento e senza chitarra/piano).
+     **6 stem** (voce/batteria/basso/chitarra/piano/altro — veloce), **4 stem alta qualità**
+     (htdemucs_ft — separazione migliore, più lento, senza chitarra/piano), o **Karaoke**
+     (voce/strumentale — rimozione voce dedicata, veloce, 2 tracce).
 4. Le impostazioni (tonalità, velocità, loop, marker, ecc.) vengono **salvate per ogni brano**;
    i dati (impostazioni, cache degli stem e modello AI) stanno nel profilo utente
    (`%APPDATA%\Practice Player` su Windows, `~/.config/Practice Player` su Linux) e **restano

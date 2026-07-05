@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('api', {
   // Single-file project (media + settings)
   saveProject: (mediaPath, settings, name, targetPath, includeStems, modelId) => ipcRenderer.invoke('project:save', mediaPath, settings, name, targetPath, includeStems, modelId),
   openProject: (ppxPath) => ipcRenderer.invoke('project:open', ppxPath),
+  onProjectProgress: (cb) => ipcRenderer.on('project:progress', (_e, p) => cb(p)),
 
   // Export (processed audio / audio+video)
   exportMedia: (opts) => ipcRenderer.invoke('export:render', opts),
