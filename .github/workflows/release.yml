@@ -11,12 +11,14 @@ permissions:
 
 jobs:
   build:
-    # Windows builds the NSIS installer, Ubuntu builds the Linux AppImage.
-    # Both publish their assets (+ latest.yml / latest-linux.yml) to the same release.
+    # Windows builds the NSIS installer, Ubuntu builds the Linux AppImage,
+    # macOS builds x64+arm64 DMGs (unsigned — Gatekeeper will show the "app not
+    # verified" prompt; users open via right-click → Open).
+    # All runners publish their assets (+ latest*.yml) to the same release.
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

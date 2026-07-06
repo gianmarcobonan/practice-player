@@ -27,11 +27,11 @@ files:
 asarUnpack:
   - "**/node_modules/onnxruntime-node/**"
 
-# Native binaries and AI models are shipped unpacked next to the app, not inside the asar.
+# AI models are the same on every platform (shipped unpacked next to the app).
+# Native binaries live in per-platform folders and are added via per-platform
+# extraResources below (Mac needs a different binary per arch, Win/Linux share
+# one bin/ each).
 extraResources:
-  - from: bin
-    to: bin
-    filter: ["**/*"]
   - from: models
     to: models
     filter: ["**/*"]
@@ -42,6 +42,10 @@ win:
   # Avoid winCodeSign (its archive contains macOS symlinks that fail to extract
   # on Windows without admin/Developer Mode). We don't sign for personal use.
   signAndEditExecutable: false
+  extraResources:
+    - from: bin
+      to: bin
+      filter: ["ffmpeg.exe", "yt-dlp.exe"]
 
 # Per-user one-click installer: no admin rights, creates shortcuts, supports
 # silent auto-update via electron-updater.
@@ -61,6 +65,27 @@ linux:
     - target: AppImage
   category: AudioVideo
   artifactName: PracticePlayer-${version}.AppImage
+  extraResources:
+    - from: bin
+      to: bin
+      filter: ["ffmpeg", "yt-dlp"]
+
+# macOS: unsigned DMGs for Intel (x64) and Apple Silicon (arm64). Gatekeeper
+# will block on double-click — users open with right-click → Apri. Auto-update
+# is NOT enabled here (electron-updater requires a signed & notarized build on
+# macOS), so no latest-mac.yml is published.
+# The per-arch ffmpeg/yt-dlp binaries are downloaded by scripts/fetch-binaries.mjs
+# into bin/mac-x64/ and bin/mac-arm64/; the ${arch} template picks the right one.
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.music
+  artifactName: PracticePlayer-${version}-${arch}.${ext}
+  extraResources:
+    - from: bin/mac-${arch}
+      to: bin
+      filter: ["**/*"]
 
 # Publishing is configured only for the `release` script / CI (via
 # -c.publish.provider=github), where owner/repo are auto-detected from the git
