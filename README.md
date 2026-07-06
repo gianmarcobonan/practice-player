@@ -1,7 +1,9 @@
 # Practice Player
 
 [![Ultima release](https://img.shields.io/github/v/release/gianmarcobonan/practice-player?label=scarica&style=for-the-badge)](https://github.com/gianmarcobonan/practice-player/releases/latest)
+[![Licenza GPL v3](https://img.shields.io/badge/licenza-GPL_v3-blue?style=for-the-badge)](LICENSE)
 ![Windows](https://img.shields.io/badge/Windows-10%2F11%2064--bit-blue?style=for-the-badge&logo=windows)
+![macOS](https://img.shields.io/badge/macOS-Intel_%2B_Apple_Silicon-000?style=for-the-badge&logo=apple)
 ![Linux](https://img.shields.io/badge/Linux-x86--64-333?style=for-the-badge&logo=linux&logoColor=white)
 
 App per esercitarsi suonando: cambia **tonalità** e **velocità** in tempo reale
@@ -133,3 +135,24 @@ quando un aggiornamento è pronto. Il numero del tag (`vX.Y.Z`) deve combaciare 
 - Il download da YouTube è pensato per uso personale; è tecnicamente contro i ToS di YouTube.
 - L'app non è firmata (uso personale): su Windows SmartScreen potrebbe avvisare al primo avvio.
 - Su Linux l'`.AppImage` va reso eseguibile (`chmod +x`) prima del primo avvio.
+
+## Licenza
+
+Practice Player è rilasciato sotto la **[GNU General Public License v3.0 o successiva](LICENSE)** (GPL-3.0-or-later). In sostanza: puoi usarlo, studiarlo, modificarlo e ridistribuirlo (anche commercialmente), a patto di rilasciare le versioni derivate sotto la stessa licenza e mantenere il codice sorgente disponibile.
+
+Copyright © 2026 Gianmarco Bonan.
+
+L'app include (o si integra con) le seguenti librerie/tool di terze parti, ciascuno con la propria licenza:
+
+| Componente | Licenza | Uso |
+| --- | --- | --- |
+| [Rubber Band Library](https://breakfastquay.com/rubberband/) (via `rubberband-wasm`) | GPL v2+ | pitch/tempo real-time |
+| [FFmpeg](https://ffmpeg.org/) (build "essentials" con x264) | GPL v2+ | decodifica media, export MP3/MP4 |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense (dominio pubblico) | download da YouTube |
+| [Demucs / HT-Demucs](https://github.com/facebookresearch/demucs) (modelli ONNX) | MIT | separazione stem |
+| [ONNX Runtime](https://onnxruntime.ai/) | MIT | esecuzione modelli AI |
+| [Electron](https://www.electronjs.org/) | MIT | runtime desktop |
+| [fft.js](https://github.com/indutny/fft.js) | MIT | analisi accordi/tuning |
+| [esbuild](https://esbuild.github.io/) | MIT | build del renderer |
+
+La scelta della GPL v3 è dovuta principalmente a Rubber Band e FFmpeg (entrambi GPL): la licenza dell'app deve essere compatibile con quella delle dipendenze.
