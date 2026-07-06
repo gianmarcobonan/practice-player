@@ -41,6 +41,10 @@ contextBridge.exposeInMainWorld('api', {
   separateStems: (filePath, modelId) => ipcRenderer.invoke('stem:separate', filePath, modelId),
   onStemProgress: (cb) => ipcRenderer.on('stem:progress', (_e, p) => cb(p)),
 
+  // Chord + key detection
+  analyzeChords: (filePath) => ipcRenderer.invoke('chords:analyze', filePath),
+  onChordsProgress: (cb) => ipcRenderer.on('chords:progress', (_e, p) => cb(p)),
+
   // Per-song settings
   getSettings: (filePath) => ipcRenderer.invoke('settings:get', filePath),
   saveSettings: (filePath, data) => ipcRenderer.invoke('settings:set', filePath, data),

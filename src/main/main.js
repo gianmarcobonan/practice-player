@@ -41,6 +41,21 @@ async function stemCacheDir(filePath, modelId) {
   return path.join(dataDir(), 'cache', 'stems', (await contentKeyFor(filePath)) + '_' + modelId);
 }
 
+// Chord analysis cache: one small JSON per media content hash. Same content
+// (song file or media re-extracted from a .ppx) reuses the same file.
+async function chordsCachePath(filePath) {
+  const dir = path.join(dataDir(), 'cache', 'chords');
+  fs.mkdirSync(dir, { recursive: true });
+  return path.join(dir, (await contentKeyFor(filePath)) + '.json');
+}
+
+function readChordsCache(cachePath) {
+  try {
+    if (!fs.existsSync(cachePath)) return null;
+    return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+  } catch { return null; }
+}
+
 // Read the separated stems from the cache and encode each to Opus, ready to be
 // embedded in a .ppx. Returns null if this media has no (complete) stem cache.
 async function packStemsFromCache(mediaPath, modelId, onProgress) {
@@ -169,6 +184,39 @@ function runSeparationWorker(job, onProgress) {
 
 ipcMain.handle('models:list', () => models.publicList());
 
+// --- Chord + key detection ---
+// Runs the analysis in a utilityProcess (mirrors the separation flow); caches
+// the result by media content hash so re-loads and .ppx re-opens are instant.
+function runChordsWorker(job, onProgress) {
+  return new Promise((resolve, reject) => {
+    const child = utilityProcess.fork(path.join(__dirname, 'chords-worker.js'));
+    let settled = false;
+    const finish = (fn, arg) => { if (settled) return; settled = true; try { child.kill(); } catch {} fn(arg); };
+    child.on('message', (msg) => {
+      if (!msg) return;
+      if (msg.type === 'progress') onProgress(msg.payload);
+      else if (msg.type === 'done') finish(resolve, msg.result);
+      else if (msg.type === 'error') finish(reject, new Error(msg.message || 'analisi accordi fallita'));
+    });
+    child.on('exit', (code) => { if (!settled) finish(reject, new Error(`worker accordi terminato (codice ${code})`)); });
+    child.postMessage(job);
+  });
+}
+
+ipcMain.handle('chords:analyze', async (evt, filePath) => {
+  if (!filePath || !fs.existsSync(filePath)) throw new Error('Nessun file da analizzare.');
+  const cachePath = await chordsCachePath(filePath);
+  const cached = readChordsCache(cachePath);
+  if (cached && cached.chords && cached.key) return cached;
+
+  const result = await runChordsWorker(
+    { filePath, ffmpegPath: ffmpegPath() },
+    (p) => evt.sender.send('chords:progress', p)
+  );
+  try { fs.writeFileSync(cachePath, JSON.stringify(result)); } catch (e) { console.error('CHORDS_CACHE_WRITE_ERROR', e); }
+  return result;
+});
+
 ipcMain.handle('stem:separate', async (evt, filePath, modelId) => {
   const model = models.getModel(modelId);
   const modelDir = path.join(dataDir(), 'models', model.id);
@@ -206,8 +254,12 @@ ipcMain.handle('project:save', async (evt, mediaPath, settings, suggestedName, t
     ? await packStemsFromCache(mediaPath, modelId || models.DEFAULT_MODEL,
         (p) => evt.sender.send('project:progress', { phase: 'save', ...p }))
     : null;
+  // Bundle the chord/key analysis too if we already have it cached (small JSON,
+  // no worker run needed at save time).
+  let chordsData = null;
+  try { chordsData = readChordsCache(await chordsCachePath(mediaPath)); } catch {}
   evt.sender.send('project:progress', { phase: 'save', writing: true });
-  await project.save(mediaPath, settings, dest, stemPack);
+  await project.save(mediaPath, settings, dest, stemPack, chordsData);
   return dest;
 });
 
@@ -222,12 +274,18 @@ ipcMain.handle('project:open', async (evt, ppxPath) => {
     if (res.canceled || res.filePaths.length === 0) return null;
     p = res.filePaths[0];
   }
-  const { mediaPath, settings, stems } = await project.load(p, path.join(dataDir(), 'projects'));
+  const { mediaPath, settings, stems, chords: embeddedChords } = await project.load(p, path.join(dataDir(), 'projects'));
   // Restore embedded stems into the cache so opening the project loads them
   // instantly (no re-separation), on this or any other machine.
   if (stems) {
     try { await unpackStemsToCache(mediaPath, stems, (pr) => evt.sender.send('project:progress', { phase: 'open', ...pr })); }
     catch (e) { console.error('STEM_UNPACK_ERROR', e); }
+  }
+  // Restore the embedded chord analysis into the cache too, so the renderer's
+  // automatic analyze call finds it instantly instead of re-running the worker.
+  if (embeddedChords && embeddedChords.chords && embeddedChords.key) {
+    try { fs.writeFileSync(await chordsCachePath(mediaPath), JSON.stringify(embeddedChords)); }
+    catch (e) { console.error('CHORDS_UNPACK_ERROR', e); }
   }
   return { mediaPath, settings, projectPath: p, hasStems: !!stems, stemModel: stems ? (stems.model || models.DEFAULT_MODEL) : null };
 });

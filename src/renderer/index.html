@@ -51,6 +51,18 @@
         <button id="videoExpand" class="btn video-expand" title="Ingrandisci video (schermo intero)">⛶</button>
       </div>
       <canvas id="waveform" class="waveform"></canvas>
+      <div id="chordsStrip" class="chords-strip" style="display:none">
+        <div class="chords-info">
+          <span class="chords-key-label">Tonalità:</span>
+          <span id="chordsKey" class="chords-key">—</span>
+          <span id="chordsStatus" class="chords-status"></span>
+        </div>
+        <div class="chords-track">
+          <div id="chordsPrev" class="chords-side chords-prev"></div>
+          <div id="chordsCurrent" class="chords-current">—</div>
+          <div id="chordsNext" class="chords-side chords-next"></div>
+        </div>
+      </div>
       <div class="controls">
         <button id="playBtn" class="btn btn-play" title="Play/Pausa (Spazio)">▶</button>
         <span class="time"><span id="curTime">0:00.00</span> / <span id="durTime">0:00.00</span></span>

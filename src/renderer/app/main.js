@@ -4,6 +4,7 @@ import { computePeaks, formatTime, clamp } from './util.js';
 import { estimateTuning } from './tuning.js';
 import { Metronome } from './metronome.js';
 import { Tuner } from './tuner.js';
+import { ChordsStrip } from './chords-strip.js';
 
 const els = {
   status: document.getElementById('status'),
@@ -104,7 +105,14 @@ const els = {
   // fine tuning manual
   fineDown: document.getElementById('fineDown'),
   fineUp: document.getElementById('fineUp'),
-  fineSlider: document.getElementById('fineSlider')
+  fineSlider: document.getElementById('fineSlider'),
+  // chords strip
+  chordsStrip: document.getElementById('chordsStrip'),
+  chordsKey: document.getElementById('chordsKey'),
+  chordsStatus: document.getElementById('chordsStatus'),
+  chordsPrev: document.getElementById('chordsPrev'),
+  chordsCurrent: document.getElementById('chordsCurrent'),
+  chordsNext: document.getElementById('chordsNext')
 };
 
 const loop = { a: null, b: null, on: false };
@@ -123,6 +131,10 @@ let stemState = [];
 const player = new Player();
 const waveform = new Waveform(els.waveCanvas, {
   onSeek: (t) => { player.seek(t); render(); }
+});
+const chordsStrip = new ChordsStrip({
+  root: els.chordsStrip, key: els.chordsKey, status: els.chordsStatus,
+  prev: els.chordsPrev, current: els.chordsCurrent, next: els.chordsNext
 });
 
 player.onended = () => { videoPause(); updatePlayBtn(); console.log('ENDED'); };
@@ -194,6 +206,7 @@ function updatePlayBtn() { els.playBtn.textContent = player.isPlaying ? '⏸' : 
 function render() {
   waveform.setProgress(player.currentTime);
   els.curTime.textContent = formatTime(player.currentTime);
+  chordsStrip.update(player.currentTime);
   // Force-align the still frame while paused/scrubbing; drift-correct while playing.
   if (hasVideo) syncVideoTime(!player.isPlaying);
 }
@@ -559,6 +572,8 @@ async function loadPath(filePath, presetSettings) {
     resetMixer();
     loop.a = loop.b = null; loop.on = false; applyLoop();
     markers = []; renderMarkers();
+    chordsStrip.clear();
+    chordsStrip.show(true);
     const decoded = await window.api.decodeFile(filePath);
     await player.load(decoded);
     setupVideo(decoded);
@@ -607,6 +622,22 @@ async function loadPath(filePath, presetSettings) {
     setStatus('pronto');
     console.log(`LOADED name=${decoded.name} dur=${decoded.duration.toFixed(2)}s ` +
       `sr=${decoded.sampleRate} ch=${decoded.channels} frames=${decoded.frames}`);
+
+    // Fire chord + key analysis in the background. Cached results (previous
+    // session or embedded in a .ppx) return instantly; otherwise the worker
+    // decodes the file mono@22kHz and runs a chromagram pipeline (~5-10s).
+    // Done in a "fire and forget" way so it never blocks the UI.
+    const analysisFilePath = filePath;
+    chordsStrip.setStatus('analisi accordi…');
+    window.api.analyzeChords(analysisFilePath).then((res) => {
+      if (currentFilePath !== analysisFilePath) return; // user switched track
+      chordsStrip.setResult(res);
+      console.log(`CHORDS ok key=${res && res.key ? res.key.label : '?'} segs=${res && res.chords ? res.chords.length : 0}`);
+    }).catch((e) => {
+      if (currentFilePath !== analysisFilePath) return;
+      chordsStrip.setStatus('accordi non disponibili');
+      console.error('CHORDS_ERROR', e);
+    });
   } catch (err) {
     setStatus('errore: ' + err.message);
     console.error('LOAD_ERROR', err);
@@ -644,6 +675,16 @@ if (window.api.onProjectProgress) {
     } else if (p.phase === 'open' && p.total) {
       updateBusy(`Estraggo gli stem dal progetto… ${p.step}/${p.total}`, p.step / p.total);
     }
+  });
+}
+
+// Chord/key analysis progress: only the STFT pass reports a fraction; the
+// decode phase is short enough that "analisi accordi…" is fine as-is.
+if (window.api.onChordsProgress) {
+  window.api.onChordsProgress((p) => {
+    if (!p) return;
+    if (p.phase === 'decode') chordsStrip.setStatus('decodifica per accordi…');
+    else if (p.phase === 'analyze') chordsStrip.setStatus('analisi accordi', p.frac);
   });
 }
 

@@ -2,18 +2,23 @@
 
 // Single-file project format (.ppx): bundles the original media (audio OR
 // audio+video — for a video project the media IS the whole video), the per-song
-// settings, and (optionally) the separated stems compressed as Opus, so one file
-// restores the whole practice setup on any machine. Self-contained — no external
-// zip dependency; media is streamed in/out to stay memory-light.
+// settings, (optionally) the separated stems compressed as Opus, and (optionally)
+// the chord/key analysis, so one file restores the whole practice setup on any
+// machine. Self-contained — no external zip dependency; media is streamed in/out
+// to stay memory-light.
 //
 // Layout:
 //   [0..4)            magic  "PPX1"
 //   [4..8)            uint32 LE  header JSON length (H)
 //   [8..8+H)          header JSON (utf8):
 //                       { v, media:{ name, size }, settings,
-//                         stems?: { codec, sources[], total, sr, blobs:[{name,size}] } }
+//                         stems?: { codec, sources[], total, sr, blobs:[{name,size}] },
+//                         chords?: { key, chords } }
 //   [8+H .. +media)   raw media bytes (exactly media.size)
-//   [ .. EOF)         stem blobs, concatenated in `stems.blobs` order (v2 only)
+//   [ .. EOF)         stem blobs, concatenated in `stems.blobs` order
+//
+// Version: v3 adds `chords` in the header (a few KB of JSON). v2 files still
+// read fine — the field is simply absent.
 
 const fs = require('fs');
 const path = require('path');
@@ -22,9 +27,11 @@ const { pipeline } = require('stream/promises');
 
 const MAGIC = 'PPX1';
 
-// Write mediaPath + settings (+ optional stemPack) into a single .ppx at outPath.
+// Write mediaPath + settings (+ optional stemPack) (+ optional chords) into a
+// single .ppx at outPath.
 // stemPack: { codec, sources[], total, sr, blobs:[{ name, buffer }] } | null.
-async function save(mediaPath, settings, outPath, stemPack) {
+// chords:   { key, chords } | null  (the raw output of chords.analyze).
+async function save(mediaPath, settings, outPath, stemPack, chords) {
   const stat = fs.statSync(mediaPath);
   const stems = stemPack ? {
     codec: stemPack.codec,
@@ -36,10 +43,11 @@ async function save(mediaPath, settings, outPath, stemPack) {
   } : null;
 
   const header = Buffer.from(JSON.stringify({
-    v: 2,
+    v: 3,
     media: { name: path.basename(mediaPath), size: stat.size },
     settings: settings || {},
-    stems
+    stems,
+    chords: chords || null
   }), 'utf8');
 
   const head = Buffer.alloc(8);
@@ -127,7 +135,13 @@ async function load(ppxPath, extractRoot) {
     }
   }
 
-  return { mediaPath, settings: meta.settings || {}, name: meta.media.name, stems };
+  return {
+    mediaPath,
+    settings: meta.settings || {},
+    name: meta.media.name,
+    stems,
+    chords: meta.chords || null
+  };
 }
 
 module.exports = { save, load, readHeader, MAGIC };

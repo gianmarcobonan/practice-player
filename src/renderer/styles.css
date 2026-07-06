@@ -88,6 +88,52 @@ html, body {
   cursor: pointer;
 }
 
+.chords-strip {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chords-info { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.chords-key-label { color: var(--muted); }
+.chords-key { font-weight: 600; color: var(--text); }
+.chords-status { color: var(--muted); font-size: 11px; margin-left: auto; font-style: italic; }
+.chords-track {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+.chords-side { display: flex; gap: 6px; overflow: hidden; }
+.chords-prev  { justify-content: flex-end; }
+.chords-next  { justify-content: flex-start; }
+.chord-chip {
+  padding: 4px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  min-width: 34px;
+  text-align: center;
+}
+.chords-current {
+  padding: 6px 16px;
+  background: var(--accent);
+  border-radius: 8px;
+  color: white;
+  font-size: 20px;
+  font-weight: 700;
+  min-width: 58px;
+  text-align: center;
+  box-shadow: 0 0 0 2px rgba(76, 139, 245, 0.25);
+}
+
 .controls {
   display: flex;
   align-items: center;
