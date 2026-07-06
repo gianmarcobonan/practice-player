@@ -39,12 +39,13 @@ const FFMPEG_URL = IS_WIN
   ? 'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip'
   : 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz';
 
-// macOS ffmpeg per architecture. Martin Riedl publishes stable "latest"
-// redirect URLs for both Intel (amd64) and Apple Silicon (arm64) — the zip
-// contains a single `ffmpeg` binary at the root.
+// macOS ffmpeg per architecture. eugeneware/ffmpeg-static publishes ready-to-run
+// single binaries (no archive) on GitHub Releases: the /latest/download/ URLs
+// redirect to the newest tag's assets. GitHub also serves them reliably from CI
+// (no hotlink protection, unlike some third-party mirrors).
 const FFMPEG_MAC_URLS = {
-  x64:   'https://ffmpeg.martin-riedl.de/redirect/latest/macos/amd64/release/ffmpeg.zip',
-  arm64: 'https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip',
+  x64:   'https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-darwin-x64',
+  arm64: 'https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-darwin-arm64',
 };
 
 function download(url, dest) {
@@ -107,16 +108,9 @@ async function fetchMacArch(arch, universalYtDlp) {
   const ffmpegDest = path.join(dir, 'ffmpeg');
   if (FORCE || !existsSync(ffmpegDest)) {
     console.log(`Scarico ffmpeg macOS (${arch})…`);
-    const archTmp = path.join(tmpDir, `mac-${arch}`);
-    rmSync(archTmp, { recursive: true, force: true });
-    mkdirSync(archTmp, { recursive: true });
-    const archive = path.join(archTmp, 'ffmpeg.zip');
-    await download(FFMPEG_MAC_URLS[arch], archive);
-    console.log(`Estraggo ffmpeg macOS (${arch})…`);
-    extract(archive, archTmp);
-    const found = findFile(archTmp, 'ffmpeg');
-    if (!found) throw new Error(`binario ffmpeg non trovato per mac-${arch}.`);
-    copyFileSync(found, ffmpegDest);
+    // eugeneware/ffmpeg-static serves the plain binary (no archive), so we
+    // just download it straight to its final destination.
+    await download(FFMPEG_MAC_URLS[arch], ffmpegDest);
     chmodSync(ffmpegDest, 0o755);
   } else console.log(`ffmpeg mac-${arch} già presente.`);
 }
