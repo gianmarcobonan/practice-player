@@ -9,6 +9,7 @@ import { ChordsStrip } from './chords-strip.js';
 const els = {
   status: document.getElementById('status'),
   openBtn: document.getElementById('openBtn'),
+  newProjectBtn: document.getElementById('newProjectBtn'),
   openProjectBtn: document.getElementById('openProjectBtn'),
   saveProjectBtn: document.getElementById('saveProjectBtn'),
   saveProjectAsBtn: document.getElementById('saveProjectAsBtn'),
@@ -651,6 +652,47 @@ async function openFile() {
   if (filePath) await loadPath(filePath);
 }
 
+// "Nuovo": close the current track and return the app to its initial empty
+// state. Per-file settings are already auto-persisted, and any open .ppx still
+// lives on disk, so nothing is lost — this just clears the workspace so a
+// fresh media/project can be loaded from scratch.
+function newProject() {
+  try { player.pause(); } catch {}
+  videoPause();
+  hasVideo = false;
+  els.videoWrap.style.display = 'none';
+  try { els.videoEl.removeAttribute('src'); els.videoEl.load(); } catch {}
+
+  currentFilePath = null;
+  currentProjectPath = null;
+  loadedStemModel = null;
+  savedStemState = null;
+  stemState = [];
+  resetMixer();
+  markers = []; renderMarkers();
+  loop.a = loop.b = null; loop.on = false; applyLoop();
+
+  waveform.setPeaks([], 0);
+  waveform.setProgress(0);
+  chordsStrip.clear();
+  chordsStrip.show(false);
+
+  state.semitones = 0; state.fineCents = 0; state.estimatedCents = null;
+  state.speedPct = 100; state.volume = 1;
+  applyPitch(); applySpeed(); applyVolume(); showTuning();
+
+  els.songName.textContent = 'nessun brano';
+  els.curTime.textContent = formatTime(0);
+  els.durTime.textContent = formatTime(0);
+  els.saveProjectBtn.disabled = true;
+  els.saveProjectAsBtn.disabled = true;
+  els.exportMp3Btn.disabled = true;
+  els.exportMp4Btn.disabled = true;
+  updatePlayBtn();
+  setStatus('pronto');
+  console.log('NEW_PROJECT reset');
+}
+
 // --- Blocking "please wait" overlay for long save/open (so the user doesn't
 // think the app is frozen and force-quit mid-operation). ---
 function showBusy(title, detail, withBar) {
@@ -1093,6 +1135,7 @@ async function togglePlay() {
 
 // --- Wiring ---
 els.openBtn.addEventListener('click', openFile);
+els.newProjectBtn.addEventListener('click', newProject);
 els.openProjectBtn.addEventListener('click', () => openProject());
 els.saveProjectBtn.addEventListener('click', () => saveProject(false));
 els.saveProjectAsBtn.addEventListener('click', () => saveProject(true));
