@@ -36,7 +36,20 @@ jobs:
       - name: Fetch native binaries (ffmpeg, yt-dlp)
         run: node scripts/fetch-binaries.mjs
 
+      # Runner macOS-latest e' arm64 e non ha Rosetta preinstallato:
+      # servira' allo smoke test per eseguire ffmpeg x64.
+      - name: Install Rosetta 2 (macOS only)
+        if: runner.os == 'macOS'
+        run: sudo softwareupdate --install-rosetta --agree-to-license
+
       - name: Build and publish release
         run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Smoke test dei DMG: verifica struttura del bundle, architettura e
+      # avvio effettivo di ffmpeg/yt-dlp. Gira DOPO la publish: se fallisce,
+      # il workflow diventa rosso e la release va rimossa a mano.
+      - name: Smoke test macOS DMGs
+        if: runner.os == 'macOS'
+        run: bash scripts/smoke-test-mac.sh dist
