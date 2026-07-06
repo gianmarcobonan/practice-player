@@ -76,7 +76,7 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
 - I progetti `.ppx` si aprono con **doppio click**: l'installer Windows registra l'estensione
   (su Linux dipende dall'integrazione dell'AppImage nel sistema). Se l'app è già aperta, il file
   viene caricato nella finestra esistente.
-- Il download da YouTube è pensato per uso personale; è tecnicamente contro i ToS di YouTube.
+- Il download da YouTube è pensato per **uso personale** (materiale di cui hai i diritti, contenuti in pubblico dominio o Creative Commons). È **tuo il responsabile** del rispetto dei ToS di YouTube e delle leggi sul copyright del tuo paese — vedi [DISCLAIMER.md](DISCLAIMER.md).
 - L'app non è firmata (uso personale): su Windows SmartScreen potrebbe avvisare al primo avvio.
 - Su Linux l'`.AppImage` va reso eseguibile (`chmod +x`) prima del primo avvio.
 

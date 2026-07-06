@@ -37,3 +37,7 @@ chmod +x PracticePlayer-*.AppImage
 
 Le versioni **Windows** e **Linux** controllano gli aggiornamenti all'avvio e ogni 6 ore: quando esce una versione nuova la scaricano in background e mostrano il pulsante **"Riavvia e aggiorna"**.
 Su **macOS** l'aggiornamento è manuale: scarica il DMG della nuova versione da questa pagina.
+
+### ⚠️ Uso responsabile
+
+Practice Player integra [yt-dlp](https://github.com/yt-dlp/yt-dlp) per il download da YouTube: è pensato per **uso personale** (materiale di cui hai i diritti, contenuti in pubblico dominio o Creative Commons). **Sei tu il responsabile** del rispetto dei ToS di YouTube e delle leggi sul copyright del tuo paese — vedi [DISCLAIMER.md](https://github.com/gianmarcobonan/practice-player/blob/main/DISCLAIMER.md).
