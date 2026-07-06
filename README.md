@@ -1,6 +1,7 @@
 # Practice Player
 
 [![Ultima release](https://img.shields.io/github/v/release/gianmarcobonan/practice-player?label=scarica&style=for-the-badge)](https://github.com/gianmarcobonan/practice-player/releases/latest)
+[![Download totali](https://img.shields.io/github/downloads/gianmarcobonan/practice-player/total?label=download&style=for-the-badge&color=blueviolet)](https://github.com/gianmarcobonan/practice-player/releases)
 [![Licenza GPL v3](https://img.shields.io/badge/licenza-GPL_v3-blue?style=for-the-badge)](LICENSE)
 ![Windows](https://img.shields.io/badge/Windows-10%2F11%2064--bit-blue?style=for-the-badge&logo=windows)
 ![macOS](https://img.shields.io/badge/macOS-Intel_%2B_Apple_Silicon-000?style=for-the-badge&logo=apple)
