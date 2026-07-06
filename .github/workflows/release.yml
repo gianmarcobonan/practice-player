@@ -10,11 +10,36 @@ permissions:
   contents: write   # let electron-builder create the release & upload assets
 
 jobs:
+  # Pre-create the GitHub Release before the matrix runs. Otherwise the three
+  # matrix jobs (win/linux/mac) race on POST /releases and the slowest one
+  # (macOS, which packs two archs) tends to lose with a 422 "already_exists".
+  # After this job, each electron-builder invocation just uploads to the
+  # existing release instead of trying to create it.
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure GitHub release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — nothing to do."
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file RELEASE_NOTES.md
+          fi
+
   build:
+    needs: prepare-release
     # Windows builds the NSIS installer, Ubuntu builds the Linux AppImage,
     # macOS builds x64+arm64 DMGs (unsigned — Gatekeeper will show the "app not
     # verified" prompt; users open via right-click → Open).
-    # All runners publish their assets (+ latest*.yml) to the same release.
+    # All runners upload their assets (+ latest*.yml) to the pre-created release.
     strategy:
       fail-fast: false
       matrix:
