@@ -6,8 +6,50 @@
 // Data: array of { start, end, chord } segments (from services/chords.js).
 // Called every animation frame via update(currentTime); pointer stays cheap by
 // caching the segment index and only re-rendering when it changes.
+//
+// Transposition: when the user shifts the pitch with the semitone stepper, the
+// displayed labels are transposed on the fly (root note rotated by N semitones)
+// so what the strip shows matches what the user is actually hearing. Segment
+// boundaries never change — only the displayed name.
 
 const NEIGHBOURS = 2;
+
+const PC = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const ROOT_PC = {
+  'C': 0, 'C#': 1, 'Db': 1,
+  'D': 2, 'D#': 3, 'Eb': 3,
+  'E': 4, 'F': 5, 'F#': 6, 'Gb': 6,
+  'G': 7, 'G#': 8, 'Ab': 8,
+  'A': 9, 'A#': 10, 'Bb': 10,
+  'B': 11
+};
+
+// Transpose a chord label like "C", "C#m", "Gbmaj7" by `semis` semitones.
+// Passes through "N" (no chord / silence) and anything unrecognised.
+function transposeChord(label, semis) {
+  if (!label || label === 'N' || label === '—') return label;
+  const m = label.match(/^([A-G])([#b]?)(.*)$/);
+  if (!m) return label;
+  const rootStr = m[1] + m[2];
+  const rootIdx = ROOT_PC[rootStr];
+  if (rootIdx == null) return label;
+  const shifted = ((rootIdx + semis) % 12 + 12) % 12;
+  return PC[shifted] + m[3];
+}
+
+// Transpose the estimated key ({tonic, mode, label}). The Italian label
+// ("C maggiore" / "A minore") is rebuilt from the transposed tonic.
+function transposeKey(key, semis) {
+  if (!key || !key.tonic) return key;
+  const rootIdx = ROOT_PC[key.tonic];
+  if (rootIdx == null) return key;
+  const newTonic = PC[((rootIdx + semis) % 12 + 12) % 12];
+  return {
+    tonic: newTonic,
+    mode: key.mode,
+    label: `${newTonic} ${key.mode === 'minor' ? 'minore' : 'maggiore'}`
+  };
+}
 
 export class ChordsStrip {
   constructor(els) {
@@ -21,6 +63,8 @@ export class ChordsStrip {
     this.segments = [];
     this.key = null;
     this.lastIdx = -2; // sentinel so the first update always renders
+    this._transpose = 0;
+    this._lastTime = 0;
   }
 
   // Show/hide the whole strip. Called when a track loads / unloads.
@@ -33,6 +77,7 @@ export class ChordsStrip {
     this.segments = [];
     this.key = null;
     this.lastIdx = -2;
+    this._lastTime = 0;
     this.keyEl.textContent = '—';
     this.statusEl.textContent = '';
     this.prevEl.innerHTML = '';
@@ -54,11 +99,29 @@ export class ChordsStrip {
     if (!result) { this.clear(); return; }
     this.segments = Array.isArray(result.chords) ? result.chords : [];
     this.key = result.key || null;
-    this.keyEl.textContent = this.key ? this.key.label : '—';
     this.statusEl.textContent = '';
+    this._renderKey();
     this.lastIdx = -2;
     // Force one paint so the strip has content even before playback starts.
-    this.update(0);
+    this.update(this._lastTime || 0);
+  }
+
+  // Called by main.js whenever the semitone stepper changes. Only re-renders
+  // when the value actually changes, and preserves the current playback position
+  // so the paint stays in sync with what the user is hearing.
+  setTranspose(semis) {
+    const v = Math.trunc(Number(semis) || 0);
+    if (v === this._transpose) return;
+    this._transpose = v;
+    this._renderKey();
+    this.lastIdx = -2; // force chord repaint
+    this.update(this._lastTime || 0);
+  }
+
+  _renderKey() {
+    if (!this.key) { this.keyEl.textContent = '—'; return; }
+    const t = transposeKey(this.key, this._transpose);
+    this.keyEl.textContent = t.label;
   }
 
   // Binary-search the segment covering `t`. Returns -1 if before first / after
@@ -79,6 +142,7 @@ export class ChordsStrip {
   }
 
   update(currentTime) {
+    this._lastTime = currentTime;
     if (this.segments.length === 0) return;
     const idx = this._indexAt(currentTime);
     if (idx === this.lastIdx) return;
@@ -90,7 +154,7 @@ export class ChordsStrip {
       this.nextEl.innerHTML = '';
       return;
     }
-    this.curEl.textContent = this.segments[idx].chord;
+    this.curEl.textContent = transposeChord(this.segments[idx].chord, this._transpose);
 
     const buildSide = (from, to, container) => {
       container.innerHTML = '';
@@ -98,7 +162,7 @@ export class ChordsStrip {
         if (i < 0 || i >= this.segments.length) continue;
         const el = document.createElement('span');
         el.className = 'chord-chip';
-        el.textContent = this.segments[i].chord;
+        el.textContent = transposeChord(this.segments[i].chord, this._transpose);
         container.appendChild(el);
       }
     };

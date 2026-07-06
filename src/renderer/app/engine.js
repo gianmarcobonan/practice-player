@@ -25,6 +25,13 @@ export class Player {
     this._posFrame = 0;
     this._posAtCtx = 0;
 
+    // Per-stem "bypass the pitch shifter" mask. Aligned with stemNames after
+    // loadStems. The renderer maintains this via setPitchLockMask(); the
+    // worklet routes tracks flagged true to a second Rubber Band instance
+    // whose pitch stays at 1.0 (drums stay in tune even at +/-N semitones).
+    this._pitchLockMask = [];
+    this.stemNames = null;
+
     this.onended = null;
     this.onready = null;
   }
@@ -75,6 +82,7 @@ export class Player {
       ? [this.channelData[0], this.channelData[1]]
       : [this.channelData[0], this.channelData[0]];
 
+    this.stemNames = null;
     this.node.port.postMessage({
       type: 'load',
       tracks: [{ channels: ch, gain: 1 }],
@@ -97,11 +105,17 @@ export class Player {
     this._duration = total / this._sr;
     const keepPos = this._posFrame;
 
-    const tracks = payload.sources.map((name) => {
+    const tracks = payload.sources.map((name, i) => {
       const inter = payload.stems[name];
       const L = new Float32Array(total), R = new Float32Array(total);
-      for (let i = 0, k = 0; k < total; k++) { L[k] = inter[i++]; R[k] = inter[i++]; }
-      return { channels: [L, R], gain: 1 };
+      for (let i2 = 0, k = 0; k < total; k++) { L[k] = inter[i2++]; R[k] = inter[i2++]; }
+      return {
+        channels: [L, R],
+        gain: 1,
+        // Route to the no-pitch sub-engine when the renderer has flagged this
+        // stem in the pitch-lock mask (per-stem toggle in the mixer).
+        noPitch: !!this._pitchLockMask[i]
+      };
     });
     this.stemNames = payload.sources;
 
@@ -166,6 +180,20 @@ export class Player {
 
   setStemGains(gains) {
     if (this.node) this.node.port.postMessage({ type: 'stemGains', gains });
+  }
+
+  // Set which stems bypass the pitch shifter. `mask` is a boolean array aligned
+  // with stemNames. Applied live — no reload. Used by the mixer's per-stem lock
+  // buttons and by the global "Batteria fissa" preset.
+  setPitchLockMask(mask) {
+    this._pitchLockMask = Array.isArray(mask) ? mask.map(Boolean) : [];
+    if (!this.node) return;
+    this.node.port.postMessage({ type: 'pitchLock', mask: this._pitchLockMask });
+  }
+
+  // Whether the currently loaded stem pack includes a "drums" track.
+  hasDrumsStem() {
+    return Array.isArray(this.stemNames) && this.stemNames.includes('drums');
   }
 
   _postSpeed() { if (this.node) this.node.port.postMessage({ type: 'speed', ratio: this._speed }); }

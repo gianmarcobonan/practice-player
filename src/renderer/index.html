@@ -11,8 +11,21 @@
   <header class="topbar">
     <h1>Practice Player</h1>
     <span id="songName" class="song-name">nessun brano</span>
-    <button id="updateBtn" class="btn btn-update" style="display:none" title="Un aggiornamento è pronto: riavvia per applicarlo">⟳ Riavvia e aggiorna</button>
     <span id="status" class="status">avvio…</span>
+    <div id="updateMenu" class="update-menu">
+      <button id="updateBadge" class="update-badge" title="Aggiornamenti">
+        <span id="appVersion">—</span>
+        <span class="update-arrow">▾</span>
+      </button>
+      <div id="updatePopover" class="update-popover" style="display:none">
+        <div id="updateStatus" class="update-status">—</div>
+        <div id="updateProgress" class="sp-track" style="display:none"><div id="updateBar" class="sp-fill"></div></div>
+        <div class="update-actions">
+          <button id="checkUpdateBtn" class="btn">🔄 Controlla</button>
+          <button id="applyUpdateBtn" class="btn btn-update" style="display:none">⟳ Aggiorna e riavvia</button>
+        </div>
+      </div>
+    </div>
   </header>
 
   <main class="content">
@@ -65,23 +78,27 @@
         </div>
       </div>
       <div class="controls">
-        <button id="playBtn" class="btn btn-play" title="Play/Pausa (Spazio)">▶</button>
-        <span class="time"><span id="curTime">0:00.00</span> / <span id="durTime">0:00.00</span></span>
-        <div class="volbar">
-          <span class="vol-icon" title="Volume">🔊</span>
-          <input id="volSlider" type="range" min="0" max="300" step="1" value="100" title="Volume" />
-          <span id="volVal" class="vol-val">100%</span>
-          <button id="volReset" class="btn" title="Riporta il volume a 100%">100%</button>
-          <button id="normBtn" class="btn" title="Normalizza ora questo brano a un livello costante">Norm</button>
-          <button id="autoNormBtn" class="btn" title="Normalizza automaticamente ogni brano al caricamento">Auto</button>
+        <div class="controls-row controls-primary">
+          <button id="playBtn" class="btn btn-play" title="Play/Pausa (Spazio)">▶</button>
+          <span class="time"><span id="curTime">0:00.00</span> / <span id="durTime">0:00.00</span></span>
+          <div class="volbar">
+            <span class="vol-icon" title="Volume">🔊</span>
+            <input id="volSlider" type="range" min="0" max="300" step="1" value="100" title="Volume" />
+            <span id="volVal" class="vol-val">100%</span>
+            <button id="volReset" class="btn" title="Riporta il volume a 100%">100%</button>
+            <button id="normBtn" class="btn" title="Normalizza ora questo brano a un livello costante">Norm</button>
+            <button id="autoNormBtn" class="btn" title="Normalizza automaticamente ogni brano al caricamento">Auto</button>
+          </div>
         </div>
-        <div class="loopbar">
-          <button id="setA" class="btn" title="Imposta inizio loop">A</button>
-          <button id="setB" class="btn" title="Imposta fine loop">B</button>
-          <button id="loopToggle" class="btn" title="Attiva/disattiva loop">↻ Loop</button>
-          <button id="loopClear" class="btn btn-ghost" title="Cancella loop">✕</button>
-          <span id="loopInfo" class="loop-info"></span>
-          <button id="addMarker" class="btn" title="Aggiungi segnaposto (M)">＋ Marker</button>
+        <div class="controls-row controls-secondary">
+          <div class="loopbar">
+            <button id="setA" class="btn" title="Imposta inizio loop">A</button>
+            <button id="setB" class="btn" title="Imposta fine loop">B</button>
+            <button id="loopToggle" class="btn" title="Attiva/disattiva loop">↻ Loop</button>
+            <button id="loopClear" class="btn btn-ghost" title="Cancella loop">✕</button>
+            <span id="loopInfo" class="loop-info"></span>
+            <button id="addMarker" class="btn" title="Aggiungi segnaposto (M)">＋ Marker</button>
+          </div>
         </div>
       </div>
       <div id="markerList" class="marker-list"></div>
@@ -109,6 +126,10 @@
           <input id="fineSlider" type="range" min="-50" max="50" step="1" value="0" />
           <button id="fineUp" class="btn mini">+</button>
           <span id="fineCents" class="fine-cents">0 cent</span>
+        </div>
+        <div class="tuning">
+          <span class="tuning-label">Batteria:</span>
+          <button id="pitchLockDrums" class="btn" title="Blocca la batteria dalla trasposizione. Richiede la separazione delle tracce (parte in automatico al primo cambio di tonalità).">🔒 Fissa (non pitcha)</button>
         </div>
       </div>
 
@@ -180,16 +201,6 @@
         </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-title">Aggiornamenti</div>
-        <div class="hint" style="margin:0 0 6px">Versione installata: <b id="appVersion">—</b></div>
-        <div id="updateStatus" class="hint" style="margin:0 0 8px">—</div>
-        <div id="updateProgress" class="sp-track" style="display:none;margin-bottom:8px"><div id="updateBar" class="sp-fill"></div></div>
-        <div class="tuner-mode" style="margin:0">
-          <button id="checkUpdateBtn" class="btn">🔄 Controlla</button>
-          <button id="applyUpdateBtn" class="btn btn-update" style="display:none">⟳ Aggiorna e riavvia</button>
-        </div>
-      </div>
     </div>
 
     <section class="panel stem-panel">

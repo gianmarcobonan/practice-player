@@ -77,8 +77,10 @@ const els = {
   loopInfo: document.getElementById('loopInfo'),
   addMarker: document.getElementById('addMarker'),
   markerList: document.getElementById('markerList'),
-  // auto-update
-  updateBtn: document.getElementById('updateBtn'),
+  // auto-update (compact badge in the top-right of the topbar with a popover)
+  updateMenu: document.getElementById('updateMenu'),
+  updateBadge: document.getElementById('updateBadge'),
+  updatePopover: document.getElementById('updatePopover'),
   appVersion: document.getElementById('appVersion'),
   updateStatus: document.getElementById('updateStatus'),
   updateProgress: document.getElementById('updateProgress'),
@@ -107,6 +109,8 @@ const els = {
   fineDown: document.getElementById('fineDown'),
   fineUp: document.getElementById('fineUp'),
   fineSlider: document.getElementById('fineSlider'),
+  // pitch lock: keep drums at original tuning while the rest is transposed
+  pitchLockDrums: document.getElementById('pitchLockDrums'),
   // chords strip
   chordsStrip: document.getElementById('chordsStrip'),
   chordsKey: document.getElementById('chordsKey'),
@@ -220,6 +224,13 @@ function applyPitch() {
   els.fineCents.textContent = state.fineCents ? `${state.fineCents > 0 ? '+' : ''}${state.fineCents} cent` : '0 cent';
   if (els.fineSlider) els.fineSlider.value = String(state.fineCents);
   player.setPitch(state.semitones, state.fineCents);
+  // Keep the chord strip in sync with the audible pitch: shifting semitones
+  // transposes chord + key labels so what you see matches what you hear.
+  chordsStrip.setTranspose(state.semitones);
+  // If the user asked to keep drums at their original pitch, kick off stem
+  // separation the first time a non-zero pitch is set — the routing takes
+  // effect as soon as the stems arrive.
+  if (!applying && pitchLockDrums && state.semitones !== 0) ensureDrumsStemLoaded();
   scheduleSave();
   console.log(`PITCH semitones=${state.semitones} fineCents=${state.fineCents}`);
 }
@@ -300,6 +311,26 @@ try { autoTune = localStorage.getItem('autoTune') === '1'; } catch {}
 function updateTuningAutoBtn() {
   els.tuningAuto.classList.toggle('active', autoTune);
 }
+
+// Global "keep drums at original pitch" preference. When on, changing the
+// pitch stepper triggers an automatic stem separation (if not already done)
+// so the drums can be routed through a bypass rubberband instance whose pitch
+// stays at 1. Until stems are ready the whole mix gets pitched (fallback).
+let pitchLockDrums = false;
+try { pitchLockDrums = localStorage.getItem('pitchLockDrums') === '1'; } catch {}
+function updatePitchLockBtn() {
+  els.pitchLockDrums.classList.toggle('active', pitchLockDrums);
+}
+// Trigger separation on the current track if the user asked to lock drums but
+// no stems are loaded yet. No-op if already loaded, or separation is running,
+// or there is no track loaded.
+async function ensureDrumsStemLoaded() {
+  if (!currentFilePath) return;
+  if (player.hasDrumsStem && player.hasDrumsStem()) return;
+  if (els.separateBtn.disabled) return; // separation already running
+  setStatus('separo la batteria per bloccarla dal pitch (può richiedere qualche minuto)…');
+  await separateStems();
+}
 // True only when the detected offset is meaningful (ignore ±2 cent noise).
 function tuningCorrectionCents() {
   if (state.estimatedCents == null) return null;
@@ -361,9 +392,18 @@ function resetMixer() {
 
 function buildMixer(sources) {
   const useSaved = savedStemState && savedStemState.length === sources.length;
-  stemState = sources.map((_, i) => useSaved
-    ? { gain: savedStemState[i].gain ?? 1, mute: !!savedStemState[i].mute, solo: !!savedStemState[i].solo }
-    : { gain: 1, mute: false, solo: false });
+  stemState = sources.map((name, i) => {
+    const s = useSaved ? savedStemState[i] : {};
+    // Default noPitch: explicit saved value wins, otherwise inherit the global
+    // "Batteria fissa" toggle for the drums stem (backward compat).
+    const defaultNoPitch = (name === 'drums' && pitchLockDrums);
+    return {
+      gain: s.gain ?? 1,
+      mute: !!s.mute,
+      solo: !!s.solo,
+      noPitch: s.noPitch != null ? !!s.noPitch : defaultNoPitch
+    };
+  });
   els.stemMixer.innerHTML = '';
   els.stemHint.style.display = 'none';
   sources.forEach((name, i) => {
@@ -373,9 +413,11 @@ function buildMixer(sources) {
       `<span class="stem-name">${STEM_LABELS[name] || name}</span>` +
       `<button class="btn mini mute" title="Muto">M</button>` +
       `<button class="btn mini solo" title="Solo">S</button>` +
+      `<button class="btn mini pitchlock" title="Blocca dal pitch shifter: questa traccia resta alla tonalità originale (utile per batteria e percussioni)">🔒</button>` +
       `<input type="range" min="0" max="150" value="100" class="vol" />`;
     const mute = row.querySelector('.mute');
     const solo = row.querySelector('.solo');
+    const lock = row.querySelector('.pitchlock');
     const vol = row.querySelector('.vol');
     mute.addEventListener('click', () => {
       stemState[i].mute = !stemState[i].mute;
@@ -387,6 +429,19 @@ function buildMixer(sources) {
       solo.classList.toggle('active', stemState[i].solo);
       applyStemGains();
     });
+    lock.addEventListener('click', () => {
+      stemState[i].noPitch = !stemState[i].noPitch;
+      lock.classList.toggle('active', stemState[i].noPitch);
+      applyPitchLock();
+      // Keep the global "Batteria fissa" toggle in sync with the drums row so
+      // the two controls always agree on the drums state.
+      if (name === 'drums' && stemState[i].noPitch !== pitchLockDrums) {
+        pitchLockDrums = stemState[i].noPitch;
+        try { localStorage.setItem('pitchLockDrums', pitchLockDrums ? '1' : '0'); } catch {}
+        updatePitchLockBtn();
+      }
+      scheduleSave();
+    });
     vol.addEventListener('input', () => {
       stemState[i].gain = parseInt(vol.value, 10) / 100;
       applyStemGains();
@@ -394,10 +449,17 @@ function buildMixer(sources) {
     // Reflect restored state on controls.
     mute.classList.toggle('active', stemState[i].mute);
     solo.classList.toggle('active', stemState[i].solo);
+    lock.classList.toggle('active', stemState[i].noPitch);
     vol.value = String(Math.round(stemState[i].gain * 100));
     els.stemMixer.appendChild(row);
   });
+  applyPitchLock();
   if (useSaved) applyStemGains();
+}
+
+// Push the current per-stem noPitch flags to the engine.
+function applyPitchLock() {
+  player.setPitchLockMask(stemState.map((s) => !!s.noPitch));
 }
 
 function applyStemGains() {
@@ -1052,7 +1114,7 @@ if (window.api.onExportProgress) {
   });
 }
 
-// --- Auto-update panel ---
+// --- Auto-update popover (compact badge in the topbar) ---
 let updateSupported = false;
 function setUpdateStatus(text, { progress = null, ready = false } = {}) {
   els.updateStatus.textContent = text;
@@ -1062,9 +1124,16 @@ function setUpdateStatus(text, { progress = null, ready = false } = {}) {
     els.updateProgress.style.display = '';
     els.updateBar.style.width = `${Math.max(0, Math.min(100, progress))}%`;
   }
-  // The "restart to update" action shows both in the panel and the header pill.
+  // The apply-and-restart button lives inside the popover; the badge itself
+  // turns green so the user notices without opening the menu.
   els.applyUpdateBtn.style.display = ready ? '' : 'none';
-  els.updateBtn.style.display = ready ? '' : 'none';
+  els.updateBadge.classList.toggle('has-update', !!ready);
+}
+
+function toggleUpdatePopover(force) {
+  const nowHidden = els.updatePopover.style.display === 'none';
+  const showing = (force == null) ? nowHidden : !!force;
+  els.updatePopover.style.display = showing ? '' : 'none';
 }
 
 if (window.api.onUpdateStatus) {
@@ -1091,7 +1160,14 @@ async function checkForUpdate(manual) {
 
 els.checkUpdateBtn.addEventListener('click', () => checkForUpdate(true));
 els.applyUpdateBtn.addEventListener('click', () => window.api.installUpdate());
-els.updateBtn.addEventListener('click', () => window.api.installUpdate());
+els.updateBadge.addEventListener('click', (e) => {
+  e.stopPropagation(); // don't trigger the outside-click close below
+  toggleUpdatePopover();
+});
+// Click outside the update menu closes the popover.
+document.addEventListener('click', (e) => {
+  if (!els.updateMenu.contains(e.target)) toggleUpdatePopover(false);
+});
 
 (async function initUpdates() {
   try {
@@ -1225,6 +1301,29 @@ els.tuningAuto.addEventListener('click', () => {
   }
   setStatus(autoTune ? 'auto-intonazione attiva' : 'auto-intonazione disattivata');
 });
+// Toggle: drums (once separated) stay at their original tuning while the rest
+// follows the pitch stepper. Convenience shortcut for the mixer's 🔒 button on
+// the drums row: also kicks off separation on first non-zero pitch.
+els.pitchLockDrums.addEventListener('click', async () => {
+  pitchLockDrums = !pitchLockDrums;
+  try { localStorage.setItem('pitchLockDrums', pitchLockDrums ? '1' : '0'); } catch {}
+  updatePitchLockBtn();
+  // If stems are already loaded, mirror the toggle on the drums mixer row so
+  // the two controls stay in sync (mixer row is the source of truth once built).
+  if (player.stemNames && stemState.length === player.stemNames.length) {
+    const drumsIdx = player.stemNames.indexOf('drums');
+    if (drumsIdx >= 0) {
+      stemState[drumsIdx].noPitch = pitchLockDrums;
+      const rows = els.stemMixer.querySelectorAll('.mixer-row');
+      const btn = rows[drumsIdx] && rows[drumsIdx].querySelector('.pitchlock');
+      if (btn) btn.classList.toggle('active', pitchLockDrums);
+      applyPitchLock();
+      scheduleSave();
+    }
+  }
+  if (pitchLockDrums && state.semitones !== 0) await ensureDrumsStemLoaded();
+  setStatus(pitchLockDrums ? 'batteria bloccata dal pitch' : 'batteria segue il pitch');
+});
 
 els.speedDown.addEventListener('click', () => { state.speedPct--; applySpeed(); });
 els.speedUp.addEventListener('click', () => { state.speedPct++; applySpeed(); });
@@ -1302,6 +1401,7 @@ if (window.api.onAutoload) {
   applyVolume();
   updateAutoNormBtn();
   updateTuningAutoBtn();
+  updatePitchLockBtn();
   els.metroBpm.value = metro.bpm;
   buildModelPicker();
   buildTuner();
