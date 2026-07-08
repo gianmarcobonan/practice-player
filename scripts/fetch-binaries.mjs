@@ -21,6 +21,7 @@ const IS_WIN = process.platform === 'win32';
 const IS_MAC = process.platform === 'darwin';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const binDir = path.join(root, 'bin');
+const buildDir = path.join(root, 'build');
 const tmpDir = path.join(root, '.bin-tmp');
 mkdirSync(binDir, { recursive: true });
 
@@ -47,6 +48,13 @@ const FFMPEG_MAC_URLS = {
   x64:   'https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-darwin-x64',
   arm64: 'https://github.com/eugeneware/ffmpeg-static/releases/latest/download/ffmpeg-darwin-arm64',
 };
+
+// Microsoft Visual C++ Redistributable (x64, 2015-2022). onnxruntime-node's
+// native binding depends on vcruntime140.dll / msvcp140.dll, which are missing
+// on a clean Windows install. build/installer.nsh runs this at install time
+// when the runtime is not already present (see the customInstall macro there).
+// aka.ms/vs/17/release/vc_redist.x64.exe is Microsoft's stable permalink.
+const VC_REDIST_URL = 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
 
 function download(url, dest) {
   return new Promise((resolve, reject) => {
@@ -159,7 +167,18 @@ async function mainWinLinux() {
     rmSync(tmpDir, { recursive: true, force: true });
   } else console.log('ffmpeg già presente.');
 
+  if (IS_WIN) await fetchVcRedist();
   console.log('Binari pronti in bin/.');
+}
+
+// Downloads vc_redist.x64.exe into build/ so the NSIS installer can bundle it
+// (build/installer.nsh runs it at install time when the runtime is missing).
+async function fetchVcRedist() {
+  mkdirSync(buildDir, { recursive: true });
+  const dest = path.join(buildDir, 'vc_redist.x64.exe');
+  if (!FORCE && existsSync(dest)) { console.log('vc_redist.x64.exe già presente.'); return; }
+  console.log('Scarico Visual C++ Redistributable (x64)…');
+  await download(VC_REDIST_URL, dest);
 }
 
 (IS_MAC ? mainMac() : mainWinLinux()).catch((e) => { console.error(e.message); process.exit(1); });

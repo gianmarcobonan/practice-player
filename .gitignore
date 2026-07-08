@@ -11,6 +11,10 @@ src/renderer/dist/
 /bin/*
 !/bin/README.md
 
+# VC++ Redistributable (fetched via scripts/fetch-binaries.mjs) bundled into
+# the Windows NSIS installer via build/installer.nsh.
+/build/vc_redist.x64.exe
+
 # Runtime/user data (models cache, downloads, settings, stem cache, projects)
 data/
 

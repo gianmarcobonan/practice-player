@@ -18,6 +18,8 @@ npm run build            # crea l'installer/AppImage/DMG per il tuo sistema in d
 
 I binari nativi `ffmpeg` e `yt-dlp` **non sono nel repo** (ffmpeg supera il limite di 100 MB per file di GitHub): vengono scaricati da `scripts/fetch-binaries.mjs` — la versione giusta per il sistema (`.exe` su Windows, static build su Linux, universal su macOS), lo fa anche la CI. Su un checkout pulito, esegui `npm run fetch-binaries` prima di `npm start`/`build`.
 
+Su Windows lo script scarica anche `vc_redist.x64.exe` in `build/`: `build/installer.nsh` lo bundla nell'installer NSIS e lo esegue in silent (solo se il runtime VC++ 2015-2022 x64 non è già presente) — serve a `onnxruntime-node`, che senza `vcruntime140.dll`/`msvcp140.dll` fallisce all'avvio su un Windows appena installato.
+
 ## Struttura
 
 - `src/main/` — processo principale Electron: IPC, decodifica (`ffmpeg`), download (`yt-dlp`), separazione (`onnxruntime-node` + HT-Demucs ONNX), impostazioni.
