@@ -32,8 +32,15 @@ export class Player {
     this._pitchLockMask = [];
     this.stemNames = null;
 
+    // Engine quality ('quality' | 'performance'), chosen per-machine by the UI.
+    this._quality = 'quality';
+
     this.onended = null;
     this.onready = null;
+    // Fired when the worklet detects sustained underruns and asks to drop to the
+    // lighter engine; and on every periodic audio-load stats report.
+    this.onQualityAuto = null;
+    this.onPerfStats = null;
   }
 
   async _init() {
@@ -46,7 +53,7 @@ export class Player {
         numberOfInputs: 0,
         numberOfOutputs: 1,
         outputChannelCount: [2],
-        processorOptions: { wasmModule: module }
+        processorOptions: { wasmModule: module, quality: this._quality }
       });
       this.node.connect(this.gain);
       this.node.port.onmessage = (e) => this._onMessage(e.data);
@@ -66,6 +73,12 @@ export class Player {
         break;
       case 'ready':
         if (this.onready) this.onready();
+        break;
+      case 'underrun':
+        if (this.onQualityAuto) this.onQualityAuto();
+        break;
+      case 'perf':
+        if (this.onPerfStats) this.onPerfStats(msg);
         break;
     }
   }
@@ -91,6 +104,7 @@ export class Player {
     // Re-apply current params after (re)load.
     this._postSpeed();
     this._postPitch();
+    this._postQuality();
     this._playing = false;
     this._posFrame = 0;
     this._posAtCtx = this.ctx.currentTime;
@@ -122,6 +136,7 @@ export class Player {
     this.node.port.postMessage({ type: 'load', tracks, frames: total });
     this._postSpeed();
     this._postPitch();
+    this._postQuality();
     this._playing = false;
     this._posAtCtx = this.ctx.currentTime;
     this.loaded = true;
@@ -172,6 +187,14 @@ export class Player {
   setPitch(semitones, cents = 0) { this._semitones = semitones; this._cents = cents; this._postPitch(); }
   setVolume(v) { this.gain.gain.value = v; }
 
+  // Switch the time/pitch engine: 'quality' (R3, best) or 'performance' (R2,
+  // lighter — for weak machines). No-op on the node until it exists; the mode is
+  // still carried into processorOptions at init, and re-posted on every (re)load.
+  setQuality(mode) {
+    this._quality = (mode === 'performance') ? 'performance' : 'quality';
+    this._postQuality();
+  }
+
   setLoop(loop) {
     if (!this.node) return;
     const f = loop ? { start: Math.round(loop.start * this._sr), end: Math.round(loop.end * this._sr) } : null;
@@ -198,4 +221,5 @@ export class Player {
 
   _postSpeed() { if (this.node) this.node.port.postMessage({ type: 'speed', ratio: this._speed }); }
   _postPitch() { if (this.node) this.node.port.postMessage({ type: 'pitch', semitones: this._semitones, cents: this._cents }); }
+  _postQuality() { if (this.node) this.node.port.postMessage({ type: 'quality', mode: this._quality }); }
 }

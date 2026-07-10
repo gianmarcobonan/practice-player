@@ -4,6 +4,23 @@ const CHANNELS = 2;
 const MAX_BLOCK = 4096;
 const POS_REPORT_FRAMES = 2048;
 
+// Underrun-based auto-fallback: if the pitched engine can't keep up (block left
+// unfilled while there is still material to render) UR_THRESHOLD times within
+// UR_WINDOW seconds, tell the renderer to drop to the lighter "performance"
+// engine. WARMUP_BLOCKS suppresses the false underruns that follow any reset
+// (seek, loop-wrap, engine recreate, bypass<->RB transition) while Rubber Band
+// re-primes its internal buffers.
+const UR_WINDOW = 2.0, UR_THRESHOLD = 3, WARMUP_BLOCKS = 8;
+// How often to report the audio-load stats to the renderer (~0.5 s = 2 reports/s).
+const PERF_REPORT_FRAMES = 22050;
+
+// performance.now() is not guaranteed inside AudioWorkletGlobalScope. Feature-
+// detect once: when present we measure true DSP time per block; otherwise the
+// audio-load indicator falls back to the underrun count only.
+const perfNow = (typeof performance !== 'undefined' && performance.now)
+  ? () => performance.now()
+  : null;
+
 // Real-time tempo/pitch engine. Holds one or more tracks (stems), splits them
 // into TWO groups — "pitched" (default) and "no-pitch" (drums, when the user
 // blocks them from transposition) — and feeds each group into its own Rubber
@@ -20,6 +37,11 @@ class EngineProcessor extends AudioWorkletProcessor {
     this.subs = [null, null]; // [pitched, unpitched]
     this.ready = false;
 
+    // Engine quality: 'quality' (R3 Finer + formant, heavy) or 'performance'
+    // (R2 Faster, light). Chosen by the renderer per-machine; also flipped
+    // automatically by the underrun fallback below.
+    this.quality = (o.quality === 'performance') ? 'performance' : 'quality';
+
     // Transport / params
     this.tracks = [];          // [{ data, gain, mute, solo, noPitch }]
     this.hasUnpitched = false; // any track flagged noPitch?
@@ -32,6 +54,16 @@ class EngineProcessor extends AudioWorkletProcessor {
     this.loop = null;          // { start, end } in frames
     this.posAcc = 0;
 
+    // Bypass + underrun-fallback + perf-report state.
+    this._bypass = null;       // current bypass predicate (null = force a transition)
+    this._warmup = 0;          // blocks in which underruns are NOT counted (post-reset priming)
+    this._urCount = 0;         // underruns in the current fallback window
+    this._urWindowStart = 0;   // currentTime at window start
+    this._fallbackSent = false; // 'underrun' already emitted (avoid spamming)
+    this._perfAcc = 0;         // frames accumulated for perf-report throttling
+    this._perfUnder = 0;       // underruns since the last perf report
+    this._perfLoadEma = 0;     // EMA of DSP-time / block-budget (0 if no perfNow)
+
     // Scratch used to mix a group's tracks before feeding a sub.
     this.mixScratch = [new Float32Array(MAX_BLOCK), new Float32Array(MAX_BLOCK)];
 
@@ -42,28 +74,40 @@ class EngineProcessor extends AudioWorkletProcessor {
 
   async _init(wasmModule) {
     this.rb = await RubberBandInterface.initialize(wasmModule);
-    // Quality settings for music practice (slow-down + transpose must sound clean):
-    //  - EngineFiner (R3): the high-quality engine; removes the "watery/metallic"
-    //    smearing the Faster engine produces at low speeds.
-    //  - FormantPreserved: keeps the timbre natural when the pitch is lowered
-    //    (vocals/instruments don't turn dark and unnatural).
-    //  - PitchHighConsistency: smooth, glitch-free live pitch-scale changes.
-    const opts =
-      RubberBandOption.RubberBandOptionProcessRealTime |
-      RubberBandOption.RubberBandOptionEngineFiner |
-      RubberBandOption.RubberBandOptionFormantPreserved |
-      RubberBandOption.RubberBandOptionPitchHighConsistency;
-    this.subs[0] = this._makeSub(opts);
-    this.subs[1] = this._makeSub(opts);
+    const opts = this._optsFor(this.quality);
+    // subs[1] (no-pitch) always starts at pitch 1; subs[0] follows the stepper.
+    this.subs[0] = this._makeSub(opts, this.pitchScale);
+    this.subs[1] = this._makeSub(opts, 1);
     this.ready = true;
     this.port.postMessage({ type: 'ready' });
   }
 
+  // Rubber Band option flags for a given quality mode. The ENGINE (Faster/Finer)
+  // is fixed at construction, so switching modes requires recreating the subs.
+  //  - quality (default): EngineFiner (R3) high-quality engine (no "watery/metallic"
+  //    smearing at low speeds) + FormantPreserved (natural timbre when pitched down)
+  //    + PitchHighConsistency (glitch-free live pitch changes).
+  //  - performance: EngineFaster (R2), no formant preservation — much lighter on
+  //    the CPU so weak machines stay glitch-free, at a small quality cost.
+  _optsFor(mode) {
+    const O = RubberBandOption;
+    if (mode === 'performance') {
+      return O.RubberBandOptionProcessRealTime |
+             O.RubberBandOptionEngineFaster |
+             O.RubberBandOptionPitchHighConsistency;
+    }
+    return O.RubberBandOptionProcessRealTime |
+           O.RubberBandOptionEngineFiner |
+           O.RubberBandOptionFormantPreserved |
+           O.RubberBandOptionPitchHighConsistency;
+  }
+
   // Allocate WASM state + IO buffers + channel-pointer arrays (float**) for one
-  // Rubber Band instance. Called twice at init; second one stays idle unless a
-  // track is marked `noPitch`.
-  _makeSub(opts) {
-    const state = this.rb.rubberband_new(this.sr, CHANNELS, opts, this.timeRatio, this.pitchScale);
+  // Rubber Band instance. Called at init and on every quality switch; the
+  // pitchScale is explicit because a mid-song recreate must restore the current
+  // pitch on subs[0] while subs[1] (no-pitch) always stays at 1.
+  _makeSub(opts, pitchScale = this.pitchScale) {
+    const state = this.rb.rubberband_new(this.sr, CHANNELS, opts, this.timeRatio, pitchScale);
     this.rb.rubberband_set_max_process_size(state, MAX_BLOCK);
     const inPtrs = this.rb.malloc(CHANNELS * 4);
     const outPtrs = this.rb.malloc(CHANNELS * 4);
@@ -86,6 +130,40 @@ class EngineProcessor extends AudioWorkletProcessor {
     this.rb.rubberband_reset(this.subs[1].state);
   }
 
+  // Free a sub's Rubber Band state and every buffer it owns (no leak on switch).
+  _destroySub(sub) {
+    if (!sub) return;
+    this.rb.rubberband_delete(sub.state);
+    this.rb.free(sub.inPtrs);
+    this.rb.free(sub.outPtrs);
+    for (let c = 0; c < CHANNELS; c++) { this.rb.free(sub.inBuf[c]); this.rb.free(sub.outBuf[c]); }
+  }
+
+  // Switch the time/pitch engine live (quality <-> performance). The engine flag
+  // is fixed at rubberband_new, so we destroy and recreate both subs. Runs inside
+  // an onmessage handler, i.e. between two process() calls, so there is no race.
+  // Playback position (sourcePos) is preserved; the ~1-block gap from allocating
+  // a fresh Rubber Band is absorbed by the warmup window.
+  _setQuality(mode) {
+    mode = (mode === 'performance') ? 'performance' : 'quality';
+    if (mode === this.quality && this.ready) return;
+    this.quality = mode;
+    if (!this.ready) return; // _init() will use this.quality
+    const savedPos = this.sourcePos;
+    this._destroySub(this.subs[0]);
+    this._destroySub(this.subs[1]);
+    const opts = this._optsFor(mode);
+    this.subs[0] = this._makeSub(opts, this.pitchScale); // restore current pitch
+    this.subs[1] = this._makeSub(opts, 1);               // no-pitch stays at 1
+    this.rb.rubberband_set_time_ratio(this.subs[0].state, this.timeRatio);
+    this.rb.rubberband_set_time_ratio(this.subs[1].state, this.timeRatio);
+    this.sourcePos = savedPos;
+    this.finalSent = false;       // re-prime from savedPos
+    this._bypass = null;          // force a clean bypass/RB transition next block
+    this._warmup = WARMUP_BLOCKS; // suppress false underruns during re-priming
+    this._fallbackSent = false;   // re-arm the detector (e.g. when back to quality)
+  }
+
   _onMessage(msg) {
     switch (msg.type) {
       case 'load':
@@ -101,6 +179,8 @@ class EngineProcessor extends AudioWorkletProcessor {
         this.sourcePos = 0;
         this.finalSent = false;
         this.playing = false;
+        this._bypass = null;          // re-evaluate bypass on the new material
+        this._warmup = WARMUP_BLOCKS; // don't count underruns while priming
         this._resetBoth();
         break;
       case 'play':
@@ -155,12 +235,16 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (wasUnpitched !== this.hasUnpitched) this._resetBoth();
         break;
       }
+      case 'quality':
+        this._setQuality(msg.mode);
+        break;
     }
   }
 
   _seek(frame) {
     this.sourcePos = Math.max(0, Math.min(frame | 0, this.sourceFrames));
     this.finalSent = false;
+    this._warmup = WARMUP_BLOCKS; // priming after a jump — don't count as underrun
     this._resetBoth();
     this.port.postMessage({ type: 'pos', frame: this.sourcePos });
   }
@@ -189,6 +273,48 @@ class EngineProcessor extends AudioWorkletProcessor {
     }
   }
 
+  // Direct passthrough used when neither time-stretch nor pitch-shift is active
+  // (speed 100%, pitch 0, no per-stem pitch lock). At ratio 1 one input frame
+  // equals one output frame, so we skip Rubber Band entirely and just mix the
+  // audible tracks into the output. Replicates the RB path's loop/ended/pos
+  // semantics exactly. `out` is already zeroed by the caller.
+  _processBypass(out, need) {
+    const audible = this._audibleTracks();
+    let produced = 0;
+    let ended = false;
+    while (produced < need) {
+      const loopEnd = this.loop ? this.loop.end : this.sourceFrames;
+      if (this.sourcePos >= loopEnd) {
+        if (this.loop) { this.sourcePos = this.loop.start; continue; }
+        ended = true; break; // end of track — leave the rest as silence
+      }
+      const chunk = Math.min(need - produced, loopEnd - this.sourcePos);
+      const base = this.sourcePos;
+      for (const t of audible) {
+        const g = t.gain;
+        for (let c = 0; c < CHANNELS; c++) {
+          const dst = out[c]; if (!dst) continue;
+          const src = t.data[c] || t.data[0]; // same mono fallback as _feedGroup
+          for (let i = 0; i < chunk; i++) dst[produced + i] += src[base + i] * g;
+        }
+      }
+      produced += chunk;
+      this.sourcePos += chunk;
+    }
+    if (ended && !this.loop) {
+      this.playing = false;
+      this.port.postMessage({ type: 'ended' });
+      this.port.postMessage({ type: 'pos', frame: this.sourceFrames });
+    }
+    this.posAcc += produced;
+    if (this.posAcc >= POS_REPORT_FRAMES) {
+      this.posAcc = 0;
+      this.port.postMessage({ type: 'pos', frame: this.sourcePos });
+    }
+    // Bypass never underruns (pure copy) — treat as a clean, fully-loaded block.
+    this._perfReport(produced, 0);
+  }
+
   process(_inputs, outputs) {
     const out = outputs[0];
     const need = out[0].length;
@@ -198,8 +324,22 @@ class EngineProcessor extends AudioWorkletProcessor {
       return true;
     }
 
+    const t0 = perfNow ? perfNow() : 0;
+
     // Zero the output; both sub-engines accumulate their contribution.
     for (let c = 0; c < out.length; c++) out[c].fill(0);
+
+    // Bypass Rubber Band entirely when there is nothing to stretch/pitch. A
+    // change of predicate resets RB so re-entry starts clean (no stale buffered
+    // samples) and primes without counting false underruns.
+    const wantBypass = (this.timeRatio === 1 && this.pitchScale === 1 && !this.hasUnpitched);
+    if (wantBypass !== this._bypass) {
+      this._resetBoth();
+      this.finalSent = false;
+      this._warmup = WARMUP_BLOCKS;
+      this._bypass = wantBypass;
+    }
+    if (wantBypass) { this._processBypass(out, need); return true; }
 
     const s0 = this.subs[0];
     const s1 = this.subs[1];
@@ -242,6 +382,7 @@ class EngineProcessor extends AudioWorkletProcessor {
         if (this.loop) {
           this.sourcePos = this.loop.start;
           this._resetBoth();
+          this._warmup = WARMUP_BLOCKS; // priming after loop wrap — not an underrun
           continue;
         }
         if (!this.finalSent) {
@@ -292,7 +433,50 @@ class EngineProcessor extends AudioWorkletProcessor {
       this.port.postMessage({ type: 'pos', frame: this.sourcePos });
     }
 
+    // Underrun detection: the block was left short WHILE there was still material
+    // to render (not the end-of-track drain) and we're past the post-reset warmup.
+    // Genuine underruns feed both the audio-load indicator and the auto-fallback.
+    const loopEndF = this.loop ? this.loop.end : this.sourceFrames;
+    const moreToPlay = this.sourcePos < loopEndF ||
+                       (this.finalSent && this.rb.rubberband_available(s0.state) > 0);
+    let underran = 0;
+    if (produced < need && moreToPlay && this._warmup <= 0) {
+      underran = 1;
+      if (this.quality !== 'performance') {
+        if (currentTime - this._urWindowStart > UR_WINDOW) { this._urWindowStart = currentTime; this._urCount = 0; }
+        if (++this._urCount >= UR_THRESHOLD && !this._fallbackSent) {
+          this._fallbackSent = true;
+          this.port.postMessage({ type: 'underrun' });
+        }
+      }
+    }
+    if (this._warmup > 0) this._warmup--;
+
+    this._perfReport(produced, underran, perfNow ? perfNow() - t0 : -1);
     return true;
+  }
+
+  // Accumulate audio-load stats and post them to the renderer ~2x/second. `dtMs`
+  // is the measured DSP time for this block (-1 when performance.now is absent);
+  // load is that time as a fraction of the block's real-time budget.
+  _perfReport(produced, underran, dtMs = 0) {
+    if (underran) this._perfUnder++;
+    if (dtMs >= 0) {
+      const budgetMs = (produced > 0 ? produced : 128) / this.sr * 1000;
+      const load = budgetMs > 0 ? dtMs / budgetMs : 0;
+      this._perfLoadEma = this._perfLoadEma * 0.9 + load * 0.1;
+    }
+    this._perfAcc += produced;
+    if (this._perfAcc >= PERF_REPORT_FRAMES) {
+      this._perfAcc = 0;
+      this.port.postMessage({
+        type: 'perf',
+        load: this._perfLoadEma,
+        underruns: this._perfUnder,
+        hasTiming: !!perfNow
+      });
+      this._perfUnder = 0;
+    }
   }
 }
 

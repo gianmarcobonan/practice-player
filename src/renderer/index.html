@@ -12,6 +12,18 @@
     <h1>Practice Player</h1>
     <span id="songName" class="song-name">nessun brano</span>
     <span id="status" class="status">avvio…</span>
+    <div id="perfStrip" class="perf-strip">
+      <span class="perf-item" title="Uso CPU dell'app: quanto il PC è sotto sforzo (verde ok · rosso saturo)">
+        <span class="perf-label">CPU</span>
+        <span class="perf-meter"><i id="cpuBar"></i></span>
+        <span id="cpuVal" class="perf-val">—</span>
+      </span>
+      <span class="perf-item" title="Carico del motore audio: rosso = scatti/underrun in corso">
+        <span class="perf-label">Audio</span>
+        <span class="perf-meter"><i id="audioBar"></i></span>
+        <span id="audioVal" class="perf-val">—</span>
+      </span>
+    </div>
     <div id="updateMenu" class="update-menu">
       <button id="updateBadge" class="update-badge" title="Aggiornamenti">
         <span id="appVersion">—</span>
@@ -41,6 +53,7 @@
       <div class="tb-group yt">
         <input id="ytUrl" type="text" placeholder="Cerca un brano o incolla un link YouTube…" spellcheck="false" />
         <button id="ytBtn" class="btn">🔎 Cerca</button>
+        <button id="ytDlBtn" class="btn" title="Scarica direttamente il link YouTube incollato nel campo">⬇ Scarica da URL</button>
       </div>
       <div class="tb-group export-group">
         <span class="tb-label">Esporta:</span>
@@ -150,6 +163,11 @@
           <button id="speedUp" class="btn">+ 1%</button>
           <div class="value"><span id="speedVal">100</span><small>%</small></div>
         </div>
+        <div class="quality-row">
+          <span class="tuning-label">Motore audio:</span>
+          <button id="qualityHigh" class="btn mode-btn active" title="Migliore qualità di time-stretch/pitch (più pesante per la CPU)">Qualità</button>
+          <button id="qualityFast" class="btn mode-btn" title="Motore più leggero: audio fluido su PC meno potenti (qualità leggermente inferiore)">Prestazioni</button>
+        </div>
       </div>
 
       <div class="panel">
@@ -254,6 +272,21 @@
         <button id="dlAudio" class="btn">🎵 Solo audio</button>
         <button id="dlVideo" class="btn">🎬 Audio + video</button>
         <button id="dlCancel" class="btn btn-ghost">Annulla</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="urlModal" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-title">Scarica da URL YouTube</div>
+      <div class="modal-body">
+        Incolla il link del video YouTube da scaricare:
+        <input id="urlInput" type="text" class="modal-input" placeholder="https://www.youtube.com/watch?v=…" spellcheck="false" />
+        <div id="urlError" class="modal-error" style="display:none">Inserisci un link YouTube valido (es. https://youtu.be/…).</div>
+      </div>
+      <div class="modal-actions">
+        <button id="urlOk" class="btn">⬇ Scarica</button>
+        <button id="urlCancel" class="btn btn-ghost">Annulla</button>
       </div>
     </div>
   </div>

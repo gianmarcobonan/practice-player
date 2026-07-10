@@ -33,6 +33,17 @@ html, body {
 .topbar h1 { font-size: 18px; margin: 0; font-weight: 600; }
 .song-name { color: var(--text); font-size: 13px; flex: 1; }
 .status { color: var(--muted); font-size: 12px; }
+
+/* Resource-saturation indicators: two compact meters (app CPU %, audio-engine
+   load) that turn amber/red as the machine or the audio thread gets stressed. */
+.perf-strip { display: flex; align-items: center; gap: 12px; }
+.perf-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.perf-label { text-transform: uppercase; letter-spacing: 0.04em; }
+.perf-meter { width: 46px; height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.perf-meter > i { display: block; height: 100%; width: 0; background: var(--accent-2); transition: width 0.35s ease, background 0.35s ease; }
+.perf-meter.warn > i { background: #f5b54c; }
+.perf-meter.crit > i { background: var(--danger); }
+.perf-val { min-width: 30px; text-align: right; font-variant-numeric: tabular-nums; }
 .update-info { color: var(--accent-2); font-size: 12px; }
 .btn-update {
   padding: 5px 10px; font-size: 12px;
@@ -258,6 +269,9 @@ html, body {
 
 .tuning { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; }
 .tuning-label { color: var(--muted); }
+.quality-row { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 13px; }
+.quality-row .mode-btn { padding: 5px 12px; font-size: 13px; }
+.quality-row .mode-btn.active { background: var(--accent); border-color: transparent; color: #fff; }
 #tuningVal { font-variant-numeric: tabular-nums; min-width: 90px; }
 .fine-cents { color: var(--accent-2); font-size: 12px; min-width: 64px; }
 .fine-row { margin-top: 8px; }
@@ -403,6 +417,20 @@ html, body {
   font-size: 12px;
   line-height: 1.45;
 }
+.modal-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
+.modal-input:focus { outline: none; border-color: var(--accent); }
+.modal-error { margin-top: 8px; color: var(--danger); font-size: 12px; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* Model picker in the stem panel */

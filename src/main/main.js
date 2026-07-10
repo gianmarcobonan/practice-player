@@ -3,6 +3,7 @@
 const { app, BrowserWindow, ipcMain, dialog, utilityProcess } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const crypto = require('crypto');
 const { pathToFileURL } = require('url');
 const { decodeToPcm, hasVideoStream } = require('./services/decode');
@@ -409,7 +410,24 @@ function createWindow() {
     });
   });
 
+  // Resource-saturation indicator: sample the app's total CPU across all its
+  // processes (main + renderer + audio service + any utility processes) once a
+  // second and push it to the renderer. percentCPUUsage is per-core, so divide
+  // by the core count to get a 0–100% share of the whole machine.
+  const cores = Math.max(1, os.cpus().length);
+  const cpuTimer = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      const metrics = app.getAppMetrics();
+      let sum = 0;
+      for (const m of metrics) sum += (m.cpu && m.cpu.percentCPUUsage) || 0;
+      const pct = Math.max(0, Math.min(100, Math.round(sum / cores)));
+      mainWindow.webContents.send('perf:cpu', { pct, cores });
+    } catch { /* metrics unavailable — skip this tick */ }
+  }, 1000);
+
   mainWindow.on('closed', () => {
+    clearInterval(cpuTimer);
     mainWindow = null;
   });
 }

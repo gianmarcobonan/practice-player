@@ -49,6 +49,9 @@ contextBridge.exposeInMainWorld('api', {
   getSettings: (filePath) => ipcRenderer.invoke('settings:get', filePath),
   saveSettings: (filePath, data) => ipcRenderer.invoke('settings:set', filePath, data),
 
+  // Resource-saturation indicator (app CPU %)
+  onPerfCpu: (cb) => ipcRenderer.on('perf:cpu', (_e, s) => cb(s)),
+
   // Dev/test auto-load
   onAutoload: (cb) => ipcRenderer.on('app:autoload', (_e, payload) => cb(payload))
 });

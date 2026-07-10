@@ -22,6 +22,7 @@ const els = {
   exportMp4Btn: document.getElementById('exportMp4Btn'),
   ytUrl: document.getElementById('ytUrl'),
   ytBtn: document.getElementById('ytBtn'),
+  ytDlBtn: document.getElementById('ytDlBtn'),
   ytResults: document.getElementById('ytResults'),
   ytProgress: document.getElementById('ytProgress'),
   ytBar: document.getElementById('ytBar'),
@@ -46,6 +47,12 @@ const els = {
   dlAudio: document.getElementById('dlAudio'),
   dlVideo: document.getElementById('dlVideo'),
   dlCancel: document.getElementById('dlCancel'),
+  // "download from URL" prompt modal
+  urlModal: document.getElementById('urlModal'),
+  urlInput: document.getElementById('urlInput'),
+  urlOk: document.getElementById('urlOk'),
+  urlCancel: document.getElementById('urlCancel'),
+  urlError: document.getElementById('urlError'),
   // pitch
   pitchDown: document.getElementById('pitchDown'),
   pitchUp: document.getElementById('pitchUp'),
@@ -61,6 +68,14 @@ const els = {
   speedUp: document.getElementById('speedUp'),
   speedSlider: document.getElementById('speedSlider'),
   speedVal: document.getElementById('speedVal'),
+  // audio engine quality toggle
+  qualityHigh: document.getElementById('qualityHigh'),
+  qualityFast: document.getElementById('qualityFast'),
+  // resource-saturation indicators
+  cpuBar: document.getElementById('cpuBar'),
+  cpuVal: document.getElementById('cpuVal'),
+  audioBar: document.getElementById('audioBar'),
+  audioVal: document.getElementById('audioVal'),
   // stems
   separateBtn: document.getElementById('separateBtn'),
   stemModel: document.getElementById('stemModel'),
@@ -144,6 +159,16 @@ const chordsStrip = new ChordsStrip({
 
 player.onended = () => { videoPause(); updatePlayBtn(); console.log('ENDED'); };
 player.onready = () => console.log('ENGINE_READY');
+
+// Auto-fallback: the worklet reports sustained underruns (the audio thread can't
+// keep up) — drop to the lighter "performance" engine so playback stops glitching.
+player.onQualityAuto = () => {
+  if (engineQuality === 'performance') return;
+  setEngineQuality('performance', { status: 'audio a scatti rilevato: passo automaticamente a "Prestazioni"' });
+  console.log('QUALITY_AUTO_FALLBACK performance');
+};
+// Live audio-engine load stats (2x/s) → drive the "Audio" indicator.
+player.onPerfStats = (m) => updateAudioMeter(m);
 
 // Standalone metronome: its tempo is absolute (NOT tied to the song or playback
 // speed) and it clicks independently of the loaded track.
@@ -320,6 +345,53 @@ let pitchLockDrums = false;
 try { pitchLockDrums = localStorage.getItem('pitchLockDrums') === '1'; } catch {}
 function updatePitchLockBtn() {
   els.pitchLockDrums.classList.toggle('active', pitchLockDrums);
+}
+
+// Global audio-engine quality preference (per-machine, not per-song). 'quality'
+// = R3 Finer (best, heavy); 'performance' = R2 Faster (lighter, for weak CPUs).
+// The auto-fallback flips this to 'performance' when it detects stutter.
+let engineQuality = 'quality';
+try { engineQuality = localStorage.getItem('engineQuality') === 'performance' ? 'performance' : 'quality'; } catch {}
+function updateQualityBtns() {
+  els.qualityHigh.classList.toggle('active', engineQuality === 'quality');
+  els.qualityFast.classList.toggle('active', engineQuality === 'performance');
+}
+function setEngineQuality(mode, opts = {}) {
+  engineQuality = mode === 'performance' ? 'performance' : 'quality';
+  try { localStorage.setItem('engineQuality', engineQuality); } catch {}
+  updateQualityBtns();
+  player.setQuality(engineQuality);
+  if (opts.status) setStatus(opts.status);
+}
+
+// --- Resource-saturation indicators (topbar meters) ---
+// Paint one meter: width = value%, colour bumps to amber/red past the thresholds.
+function paintMeter(bar, pct, warn, crit) {
+  const meter = bar.parentElement;
+  bar.style.width = Math.max(0, Math.min(100, pct)) + '%';
+  meter.classList.toggle('warn', pct >= warn && pct < crit);
+  meter.classList.toggle('crit', pct >= crit);
+}
+function updateCpuMeter(pct) {
+  els.cpuVal.textContent = pct + '%';
+  paintMeter(els.cpuBar, pct, 50, 85);
+}
+// Audio load: an underrun in the last window forces red (stutter happening now);
+// otherwise use the measured DSP load when available, else "ok"/green.
+function updateAudioMeter(m) {
+  if (m.underruns > 0) {
+    els.audioVal.textContent = 'scatti';
+    paintMeter(els.audioBar, 100, 60, 85);
+    return;
+  }
+  if (m.hasTiming) {
+    const pct = Math.round((m.load || 0) * 100);
+    els.audioVal.textContent = pct + '%';
+    paintMeter(els.audioBar, pct, 60, 85);
+  } else {
+    els.audioVal.textContent = 'ok';
+    paintMeter(els.audioBar, 20, 60, 85);
+  }
 }
 // Trigger separation on the current track if the user asked to lock drums but
 // no stems are loaded yet. No-op if already loaded, or separation is running,
@@ -924,6 +996,34 @@ function askDownloadMode() {
   });
 }
 
+// Prompt for a YouTube URL in a modal. Resolves to the trimmed URL, or null if
+// cancelled. Validates inline (keeps the modal open on an invalid link).
+function askYoutubeUrl(prefill = '') {
+  return new Promise((resolve) => {
+    els.urlModal.style.display = '';
+    els.urlError.style.display = 'none';
+    els.urlInput.value = prefill;
+    els.urlInput.focus();
+    els.urlInput.select();
+    const cleanup = () => {
+      els.urlModal.style.display = 'none';
+      els.urlOk.onclick = els.urlCancel.onclick = els.urlInput.onkeydown = null;
+      window.removeEventListener('keydown', onKey, true);
+    };
+    const submit = () => {
+      const v = els.urlInput.value.trim();
+      if (!v) { cleanup(); resolve(null); return; }
+      if (!isYtUrl(v)) { els.urlError.style.display = ''; els.urlInput.focus(); els.urlInput.select(); return; }
+      cleanup(); resolve(v);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cleanup(); resolve(null); } };
+    els.urlOk.onclick = submit;
+    els.urlCancel.onclick = () => { cleanup(); resolve(null); };
+    els.urlInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } };
+    window.addEventListener('keydown', onKey, true);
+  });
+}
+
 function isYtUrl(s) { return /^https?:\/\//i.test(s) || /(youtube\.com|youtu\.be)\//i.test(s); }
 
 function fmtDur(s) {
@@ -1049,6 +1149,7 @@ async function downloadUrl(url) {
   const label = mode === 'video' ? 'audio+video' : 'solo audio';
   try {
     els.ytBtn.disabled = true;
+    els.ytDlBtn.disabled = true;
     hideYtResults();
     ytLastPct = -1; ytPass = 0;
     setYtBar(0, `download YouTube (${label})… avvio…`, true);
@@ -1065,12 +1166,14 @@ async function downloadUrl(url) {
     console.error('YT_ERROR', err);
   } finally {
     els.ytBtn.disabled = false;
+    els.ytDlBtn.disabled = false;
   }
 }
 
 async function searchYoutube(query) {
   try {
     els.ytBtn.disabled = true;
+    els.ytDlBtn.disabled = true;
     setStatus('cerco su YouTube…');
     const results = await window.api.searchYoutube(query);
     renderYtResults(results);
@@ -1080,6 +1183,7 @@ async function searchYoutube(query) {
     console.error('YT_SEARCH_ERROR', err);
   } finally {
     els.ytBtn.disabled = false;
+    els.ytDlBtn.disabled = false;
   }
 }
 
@@ -1089,6 +1193,15 @@ async function downloadYoutube() {
   if (!q) return;
   if (isYtUrl(q)) await downloadUrl(q);
   else await searchYoutube(q);
+}
+
+// Toolbar action: open a prompt asking for the YouTube URL, then download it.
+// Pre-fills the field's content if it already looks like a link (convenience).
+async function downloadFromUrl() {
+  const cur = els.ytUrl.value.trim();
+  const url = await askYoutubeUrl(isYtUrl(cur) ? cur : '');
+  if (!url) return;
+  await downloadUrl(url);
 }
 
 // yt-dlp reports 0–100 per stream; for video it downloads two streams (video then
@@ -1244,7 +1357,14 @@ document.addEventListener('fullscreenchange', () => {
   els.videoExpand.title = fs ? 'Riduci video' : 'Ingrandisci video (schermo intero)';
 });
 els.ytBtn.addEventListener('click', downloadYoutube);
+els.ytDlBtn.addEventListener('click', downloadFromUrl);
 els.separateBtn.addEventListener('click', separateStems);
+
+els.qualityHigh.addEventListener('click', () => setEngineQuality('quality', { status: 'motore audio: Qualità' }));
+els.qualityFast.addEventListener('click', () => setEngineQuality('performance', { status: 'motore audio: Prestazioni' }));
+
+// App CPU % pushed from the main process ~1x/s.
+if (window.api.onPerfCpu) window.api.onPerfCpu(({ pct }) => updateCpuMeter(pct));
 
 els.setA.addEventListener('click', () => { loop.a = player.currentTime; if (loop.b != null && loop.b <= loop.a) loop.b = null; applyLoop(); });
 els.setB.addEventListener('click', () => { loop.b = player.currentTime; if (loop.a != null && loop.a >= loop.b) loop.a = null; applyLoop(); });
@@ -1402,6 +1522,8 @@ if (window.api.onAutoload) {
   updateAutoNormBtn();
   updateTuningAutoBtn();
   updatePitchLockBtn();
+  updateQualityBtns();
+  player.setQuality(engineQuality); // apply the saved per-machine engine choice
   els.metroBpm.value = metro.bpm;
   buildModelPicker();
   buildTuner();
