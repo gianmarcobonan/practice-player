@@ -11,6 +11,31 @@ function downloadsDir() {
   return d;
 }
 
+function extractVideoId(url) {
+  const m = String(url || '').match(/(?:v=|\/shorts\/|youtu\.be\/|\/embed\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+
+// Fallback per ritrovare il file scaricato quando il path stampato da yt-dlp
+// non è utilizzabile (mismatch di normalizzazione Unicode, encoding, ecc.).
+// Il template -o inserisce sempre "[videoId]" nel nome, quindi cerchiamo il
+// file piu' recente in downloads/ che contiene quel marker.
+function findByVideoId(dir, videoId) {
+  if (!videoId) return null;
+  try {
+    const marker = `[${videoId}].`;
+    const files = fs.readdirSync(dir)
+      .filter((f) => f.includes(marker))
+      .map((f) => {
+        const p = path.join(dir, f);
+        try { return { p, mtime: fs.statSync(p).mtimeMs }; } catch { return null; }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.mtime - a.mtime);
+    return files.length ? files[0].p : null;
+  } catch { return null; }
+}
+
 // Download a URL with yt-dlp.
 //  - mode 'audio' (default): bestaudio container (m4a/webm/opus) fed straight to
 //    our ffmpeg decoder, no re-encode.
@@ -36,7 +61,10 @@ function download(url, mode, onProgress) {
       '--ffmpeg-location', path.dirname(ffmpegPath()),
       '-o', outTpl,
       '--no-simulate',
-      '--print', 'after_move:filepath',
+      // Marker esplicito: cosi' riconosciamo la riga del filepath senza dover
+      // testare fs.existsSync() su ogni riga di stdout (fragile con Unicode
+      // non-ASCII su Windows).
+      '--print', 'after_move:@@FILE@@%(filepath)s',
       // Structured progress so we can report percent + ETA (remaining) + speed.
       '--progress-template', 'download:@@PP@@|%(progress._percent_str)s|%(progress._eta_str)s|%(progress._speed_str)s',
       '--newline',
@@ -60,11 +88,13 @@ function download(url, mode, onProgress) {
         }
         return;
       }
+      if (l.startsWith('@@FILE@@')) {
+        resultPath = l.slice('@@FILE@@'.length).trim();
+        return;
+      }
       // Fallback for the default progress line: "[download]  12.3% of ~3.4MiB at ..."
       const m = l.match(/\[download\]\s+([\d.]+)%/);
       if (m && onProgress) onProgress({ percent: parseFloat(m[1]), eta: '', speed: '' });
-      // The after_move:filepath print is a bare existing path.
-      if (!l.startsWith('[') && fs.existsSync(l)) resultPath = l;
     };
 
     yt.stdout.on('data', (d) => {
@@ -83,7 +113,13 @@ function download(url, mode, onProgress) {
         return reject(new Error(`yt-dlp ha fallito (codice ${code}): ${stderr.trim().split('\n').slice(-3).join(' ')}`));
       }
       if (!resultPath || !fs.existsSync(resultPath)) {
-        return reject(new Error('Download completato ma file non trovato.'));
+        const fallback = findByVideoId(downloadsDir(), extractVideoId(url));
+        if (fallback && fs.existsSync(fallback)) {
+          resultPath = fallback;
+        } else {
+          const tail = stderr.trim().split('\n').slice(-2).join(' ');
+          return reject(new Error(`Download completato ma file non trovato${tail ? ` (${tail})` : ''}.`));
+        }
       }
       resolve({ filePath: resultPath, title: path.basename(resultPath).replace(/\.[^.]+$/, '') });
     });
