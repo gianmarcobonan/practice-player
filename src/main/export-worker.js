@@ -70,15 +70,32 @@ process.parentPort.on('message', async (e) => {
     fs.writeFileSync(raw, Buffer.from(rendered.interleaved.buffer, rendered.interleaved.byteOffset, rendered.interleaved.byteLength));
     const outDur = rendered.frames / rendered.sampleRate;
 
+    // EQ: mirror the live 8-band parametric EQ with a chain of ffmpeg `equalizer`
+    // peaking filters (t=q → w is the Q, g is dB), so the export sounds like
+    // playback. Flat bands (g=0) are skipped. Empty chain → no -af added.
+    const eqBands = Array.isArray(settings.eq) ? settings.eq : [];
+    const eqChain = eqBands
+      .filter((b) => b && b.g)
+      .map((b) => `equalizer=f=${Math.round(b.f)}:t=q:w=${(b.q || 1.4).toFixed(2)}:g=${b.g}`)
+      .join(',');
+    const afArgs = eqChain ? ['-af', eqChain] : [];
+
     let args;
     if (mode === 'video') {
       const speed = (settings.speedPct || 100) / 100;
       const ptsFactor = (1 / speed).toFixed(6);
+      // A/V sync shift: the live offset is in source-seconds and means "video
+      // ahead of audio". Advancing the video = shifting its input timestamps
+      // earlier, i.e. -itsoffset. Only applied when the user set a non-zero
+      // offset (default 0 → no change).
+      const vOff = Number(settings.videoOffset) || 0;
+      const videoInput = vOff ? ['-itsoffset', (-vOff).toFixed(3), '-i', filePath] : ['-i', filePath];
       args = [
         '-y',
-        '-i', filePath,
+        ...videoInput,
         '-f', 'f32le', '-ar', '44100', '-ac', '2', '-i', raw,
         '-filter:v', `setpts=${ptsFactor}*PTS`,
+        ...afArgs,
         '-map', '0:v:0', '-map', '1:a:0',
         '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '20', '-pix_fmt', 'yuv420p',
         '-c:a', 'aac', '-b:a', '192k',
@@ -89,6 +106,7 @@ process.parentPort.on('message', async (e) => {
       args = [
         '-y',
         '-f', 'f32le', '-ar', '44100', '-ac', '2', '-i', raw,
+        ...afArgs,
         '-c:a', 'libmp3lame', '-q:a', '2',
         outPath
       ];

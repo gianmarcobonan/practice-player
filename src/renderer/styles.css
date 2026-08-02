@@ -497,3 +497,29 @@ html, body {
 .oct-val { min-width: 18px; text-align: center; font-weight: 600; }
 .tuner-row .btn-ghost { margin-left: auto; }
 
+/* Audio/video sync-shift row (under the transport controls) */
+.controls-video { gap: 8px; font-size: 13px; }
+.controls-video #avOffset { width: 220px; accent-color: var(--accent); }
+.controls-video .btn.mini { padding: 4px 10px; }
+.av-off-val { min-width: 64px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* Graphic equalizer (canvas: live spectrum + draggable EQ curve) */
+.eq-panel { grid-column: 1 / -1; }   /* full width across the panel grid */
+.eq-canvas {
+  display: block;
+  width: 100%;
+  height: 280px;
+  background: #12141a;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  touch-action: none;               /* let pointer drags work without scrolling */
+}
+.eq-hint {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 8px;
+}
+.eq-hint span { white-space: nowrap; }
+.eq-hint b { color: var(--text); font-weight: 600; }
+

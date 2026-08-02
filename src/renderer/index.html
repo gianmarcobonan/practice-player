@@ -113,6 +113,15 @@
             <button id="addMarker" class="btn" title="Aggiungi segnaposto (M)">＋ Marker</button>
           </div>
         </div>
+        <!-- Audio/video sync shift (only shown when a video is loaded) -->
+        <div class="controls-row controls-video" id="videoSyncRow" style="display:none">
+          <span class="tuning-label" title="Sposta il video rispetto all'audio per correggere lo sfasamento. Valori positivi = video in anticipo.">🎬 Sync video:</span>
+          <button id="avOffDown" class="btn mini" title="Ritarda il video (−10 ms)">−</button>
+          <input id="avOffset" type="range" min="-1000" max="1000" step="5" value="0" title="Spostamento audio/video (ms)" />
+          <button id="avOffUp" class="btn mini" title="Anticipa il video (+10 ms)">+</button>
+          <span id="avOffsetVal" class="av-off-val">0 ms</span>
+          <button id="avOffReset" class="btn btn-ghost" title="Azzera lo spostamento">↺</button>
+        </div>
       </div>
       <div id="markerList" class="marker-list"></div>
     </section>
@@ -216,6 +225,20 @@
           <span id="octVal" class="oct-val">4</span>
           <button id="octUp" class="btn mini">+</button>
           <button id="tunerStop" class="btn btn-ghost">⏹ Stop</button>
+        </div>
+      </div>
+
+      <div class="panel eq-panel">
+        <div class="panel-title">
+          Equalizzatore <small class="panel-sub">(spettro live · trascina i punti)</small>
+          <button id="eqReset" class="btn" style="float:right;margin-top:-4px" title="Azzera tutte le bande (risposta piatta)">↺ Flat</button>
+        </div>
+        <canvas id="eqCanvas" class="eq-canvas"></canvas>
+        <div class="hint eq-hint">
+          <span>↔ trascina = <b>frequenza</b></span>
+          <span>↕ trascina = <b>volume</b></span>
+          <span>🖱 <b>rotella</b> sul punto = <b>larghezza</b> (Q)</span>
+          <span>doppio-click = azzera banda</span>
         </div>
       </div>
 

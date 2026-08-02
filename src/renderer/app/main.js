@@ -5,6 +5,7 @@ import { estimateTuning } from './tuning.js';
 import { Metronome } from './metronome.js';
 import { Tuner } from './tuner.js';
 import { ChordsStrip } from './chords-strip.js';
+import { EqGraph } from './eq-graph.js';
 
 const els = {
   status: document.getElementById('status'),
@@ -41,6 +42,16 @@ const els = {
   videoWrap: document.getElementById('videoWrap'),
   videoEl: document.getElementById('videoEl'),
   videoExpand: document.getElementById('videoExpand'),
+  // audio/video sync shift
+  videoSyncRow: document.getElementById('videoSyncRow'),
+  avOffset: document.getElementById('avOffset'),
+  avOffDown: document.getElementById('avOffDown'),
+  avOffUp: document.getElementById('avOffUp'),
+  avOffsetVal: document.getElementById('avOffsetVal'),
+  avOffReset: document.getElementById('avOffReset'),
+  // graphic equalizer
+  eqCanvas: document.getElementById('eqCanvas'),
+  eqReset: document.getElementById('eqReset'),
   dropOverlay: document.getElementById('dropOverlay'),
   // download choice modal
   dlModal: document.getElementById('dlModal'),
@@ -182,7 +193,11 @@ function updateMetroBtn() {
 const tuner = new Tuner(player.ctx);
 let tunerOctave = 4;
 
-const state = { semitones: 0, speedPct: 100, fineCents: 0, estimatedCents: null, volume: 1 };
+const state = {
+  semitones: 0, speedPct: 100, fineCents: 0, estimatedCents: null, volume: 1,
+  videoOffset: 0,   // seconds; +video ahead of audio, −video behind
+  eq: null          // array of {f,g,q} bands; built in init from engine defaults
+};
 
 // --- Video (tutorial) sync ---
 // The audio engine (rubberband) is the master clock; the <video> element is a
@@ -199,6 +214,7 @@ function setupVideo(decoded) {
     v.playbackRate = state.speedPct / 100;
     v.src = decoded.fileUrl;
     els.videoWrap.style.display = '';
+    els.videoSyncRow.style.display = '';
     try { v.load(); } catch {}
   } else {
     hasVideo = false;
@@ -206,16 +222,88 @@ function setupVideo(decoded) {
     v.removeAttribute('src');
     try { v.load(); } catch {}
     els.videoWrap.style.display = 'none';
+    els.videoSyncRow.style.display = 'none';
   }
 }
 
 function syncVideoTime(force) {
   if (!hasVideo) return;
   const v = els.videoEl;
-  const target = player.currentTime;
+  // Apply the user's manual A/V offset: positive shifts the picture ahead of
+  // the audio, negative behind. Clamp into the media's valid range.
+  const dur = v.duration || player.duration || 0;
+  const target = Math.max(0, Math.min(player.currentTime + state.videoOffset, dur || Infinity));
   if (force || Math.abs(v.currentTime - target) > VIDEO_DRIFT) {
     try { v.currentTime = target; } catch {}
   }
+}
+
+// --- A/V sync shift ---
+function applyVideoOffset() {
+  state.videoOffset = clamp(state.videoOffset, -1, 1);
+  const ms = Math.round(state.videoOffset * 1000);
+  els.avOffsetVal.textContent = (ms > 0 ? '+' : '') + ms + ' ms';
+  els.avOffset.value = String(ms);
+  if (hasVideo) syncVideoTime(true);
+  scheduleSave();
+}
+
+// --- Graphic equalizer (8 bands + live spectrum, monitoring only) ---
+let eqGraph = null;
+
+const EQ_Q_DEFAULT = 1.4;
+function defaultEqBands() { return player.eqDefaultFreqs.map((f) => ({ f, g: 0, q: EQ_Q_DEFAULT })); }
+
+// Accepts the current state, a saved band list, or (back-compat) an old array
+// of plain gain numbers, and returns a clean array of {f,g,q} bands.
+function normalizeEq(raw) {
+  const freqs = player.eqDefaultFreqs;
+  if (!Array.isArray(raw)) return defaultEqBands();
+  return freqs.map((f, i) => {
+    const v = raw[i];
+    if (v == null) return { f, g: 0, q: EQ_Q_DEFAULT };
+    if (typeof v === 'number') return { f, g: clamp(Math.round(v), -12, 12), q: EQ_Q_DEFAULT };
+    return {
+      f: clamp(v.f != null ? v.f : f, 20, 20000),
+      g: clamp(Math.round(v.g || 0), -12, 12),
+      q: clamp(v.q != null ? v.q : EQ_Q_DEFAULT, 0.3, 10)
+    };
+  });
+}
+
+function buildEq() {
+  if (!Array.isArray(state.eq)) state.eq = defaultEqBands();
+  eqGraph = new EqGraph(els.eqCanvas, {
+    bands: state.eq,
+    defaultFreqs: player.eqDefaultFreqs,
+    gainRange: 12,
+    responseFn: (freqs) => player.getEqResponseDb(freqs),
+    onChange: (i, band) => {
+      state.eq[i] = band;
+      player.setEqBand(i, band);
+      scheduleSave();
+    }
+  });
+}
+
+// Normalize state.eq, push all bands to the engine, and refresh the graph.
+function applyEq() {
+  state.eq = normalizeEq(state.eq);
+  player.setEqBands(state.eq);
+  if (eqGraph) eqGraph.setBands(state.eq);
+}
+
+function resetEq() {
+  state.eq = defaultEqBands();
+  applyEq();
+  scheduleSave();
+}
+
+// Feed the live spectrum to the EQ graph (called from the render loop).
+function updateEqSpectrum() {
+  if (!eqGraph) return;
+  if (player.isPlaying) eqGraph.pushSpectrum(player.getSpectrum(), player.analyserSampleRate, player.fftSize);
+  else eqGraph.clearSpectrum();
 }
 
 function videoPlay() {
@@ -239,6 +327,7 @@ function render() {
   chordsStrip.update(player.currentTime);
   // Force-align the still frame while paused/scrubbing; drift-correct while playing.
   if (hasVideo) syncVideoTime(!player.isPlaying);
+  updateEqSpectrum();
 }
 
 // --- Pitch + fine tuning ---
@@ -546,6 +635,8 @@ function gatherSettings() {
     fineCents: state.fineCents,
     speedPct: state.speedPct,
     volume: state.volume,
+    videoOffset: state.videoOffset,
+    eq: (state.eq || []).map((b) => ({ f: b.f, g: b.g, q: b.q })),
     loop: { a: loop.a, b: loop.b, on: loop.on },
     markers,
     stemState,
@@ -573,6 +664,10 @@ async function applySettings(s) {
     applySpeed();
     state.volume = s.volume != null ? s.volume : 1;
     applyVolume();
+    state.videoOffset = s.videoOffset || 0;
+    applyVideoOffset();
+    state.eq = normalizeEq(s.eq);
+    applyEq();
     loop.a = s.loop && s.loop.a != null ? s.loop.a : null;
     loop.b = s.loop && s.loop.b != null ? s.loop.b : null;
     loop.on = !!(s.loop && s.loop.on);
@@ -813,7 +908,8 @@ function newProject() {
 
   state.semitones = 0; state.fineCents = 0; state.estimatedCents = null;
   state.speedPct = 100; state.volume = 1;
-  applyPitch(); applySpeed(); applyVolume(); showTuning();
+  state.videoOffset = 0; state.eq = defaultEqBands();
+  applyPitch(); applySpeed(); applyVolume(); applyVideoOffset(); applyEq(); showTuning();
 
   els.songName.textContent = 'nessun brano';
   els.curTime.textContent = formatTime(0);
@@ -1332,6 +1428,15 @@ els.exportMp3Btn.addEventListener('click', () => exportMedia('mp3'));
 els.exportMp4Btn.addEventListener('click', () => exportMedia('video'));
 els.volSlider.addEventListener('input', () => { state.volume = parseInt(els.volSlider.value, 10) / 100; applyVolume(); });
 els.volReset.addEventListener('click', () => { state.volume = 1; applyVolume(); setStatus('volume a 100%'); });
+
+// A/V sync shift (video offset in ms → seconds)
+els.avOffset.addEventListener('input', () => { state.videoOffset = (parseInt(els.avOffset.value, 10) || 0) / 1000; applyVideoOffset(); });
+els.avOffDown.addEventListener('click', () => { state.videoOffset -= 0.01; applyVideoOffset(); });
+els.avOffUp.addEventListener('click', () => { state.videoOffset += 0.01; applyVideoOffset(); });
+els.avOffReset.addEventListener('click', () => { state.videoOffset = 0; applyVideoOffset(); setStatus('sync video azzerato'); });
+
+// Graphic equalizer
+els.eqReset.addEventListener('click', () => { resetEq(); setStatus('equalizzatore azzerato'); });
 els.normBtn.addEventListener('click', normalizeVolume);
 els.autoNormBtn.addEventListener('click', () => {
   autoNorm = !autoNorm;
@@ -1516,9 +1621,12 @@ if (window.api.onAutoload) {
 }
 
 (async function init() {
+  buildEq();
   applyPitch();
   applySpeed();
   applyVolume();
+  applyVideoOffset();
+  applyEq();
   updateAutoNormBtn();
   updateTuningAutoBtn();
   updatePitchLockBtn();
