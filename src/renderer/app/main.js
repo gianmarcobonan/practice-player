@@ -3,6 +3,8 @@ import { Waveform } from './waveform.js';
 import { computePeaks, formatTime, clamp } from './util.js';
 import { estimateTuning } from './tuning.js';
 import { Metronome } from './metronome.js';
+import { DEFAULT_SOUND, isMetroSound } from './metro-sounds.js';
+import { SHORTCUTS, comboLabel, footerItems, matchShortcut } from './shortcuts.js';
 import { Tuner } from './tuner.js';
 import { ChordsStrip } from './chords-strip.js';
 import { EqGraph } from './eq-graph.js';
@@ -122,7 +124,16 @@ const els = {
   metroHalf: document.getElementById('metroHalf'),
   metroDouble: document.getElementById('metroDouble'),
   metroSig: document.getElementById('metroSig'),
+  metroSound: document.getElementById('metroSound'),
+  metroVol: document.getElementById('metroVol'),
+  metroVolVal: document.getElementById('metroVolVal'),
   countIn: document.getElementById('countIn'),
+  // keyboard shortcuts help
+  helpBtn: document.getElementById('helpBtn'),
+  shortcutsBar: document.getElementById('shortcutsBar'),
+  shortcutsOverlay: document.getElementById('shortcutsOverlay'),
+  shortcutsBody: document.getElementById('shortcutsBody'),
+  shortcutsClose: document.getElementById('shortcutsClose'),
   // tuner
   tunerKeys: document.getElementById('tunerKeys'),
   octDown: document.getElementById('octDown'),
@@ -188,6 +199,38 @@ function updateMetroBtn() {
   els.metroToggle.textContent = metro.on ? '⏸ Click' : '▶ Click';
   els.metroToggle.classList.toggle('active', metro.on);
 }
+
+// Click timbre and level. Both are global preferences (localStorage) that a
+// song may override: applySettings() resolves song → global → default.
+let metroSoundPref = DEFAULT_SOUND;
+let metroVolPref = 0.5;
+try {
+  const s = localStorage.getItem('metroSound');
+  if (isMetroSound(s)) metroSoundPref = s;
+  const v = parseFloat(localStorage.getItem('metroVol'));
+  if (Number.isFinite(v)) metroVolPref = clamp(v / 100, 0, 1);
+} catch {}
+
+// Apply to the metronome + the controls; `remember` also stores the global pref.
+function applyMetroSound(id, remember) {
+  els.metroSound.value = metro.setSound(id);
+  if (remember) {
+    metroSoundPref = metro.sound;
+    try { localStorage.setItem('metroSound', metro.sound); } catch {}
+  }
+}
+function applyMetroVolume(v01, remember) {
+  const v = metro.setVolume(v01);
+  const pct = Math.round(v * 100);
+  els.metroVol.value = pct;
+  els.metroVolVal.textContent = pct + '%';
+  if (remember) {
+    metroVolPref = v;
+    try { localStorage.setItem('metroVol', String(pct)); } catch {}
+  }
+}
+applyMetroSound(metroSoundPref);
+applyMetroVolume(metroVolPref);
 
 // Simple reference-tone tuner.
 const tuner = new Tuner(player.ctx);
@@ -643,7 +686,9 @@ function gatherSettings() {
     metro: {
       bpm: metro.bpm,
       beatsPerBar: metro.beatsPerBar,
-      countIn: parseInt(els.countIn.value, 10) || 0
+      countIn: parseInt(els.countIn.value, 10) || 0,
+      sound: metro.sound,
+      volume: metro.volume
     }
   };
 }
@@ -681,6 +726,10 @@ async function applySettings(s) {
       els.metroSig.value = String(metro.beatsPerBar);
       els.countIn.value = String(s.metro.countIn || 0);
     }
+    // Sound/level: song value wins, else fall back to the global preference —
+    // never keep the previous song's timbre.
+    applyMetroSound(s.metro && s.metro.sound ? s.metro.sound : metroSoundPref);
+    applyMetroVolume(s.metro && s.metro.volume != null ? s.metro.volume : metroVolPref);
     savedStemState = Array.isArray(s.stemState) ? s.stemState : null;
   } finally {
     applying = false;
@@ -1490,6 +1539,8 @@ els.metroBpm.addEventListener('change', () => {
 });
 els.metroTap.addEventListener('click', () => { els.metroBpm.value = Math.round(metro.tap()); scheduleSave(); });
 els.metroSig.addEventListener('change', () => { metro.setBeatsPerBar(parseInt(els.metroSig.value, 10) || 4); scheduleSave(); });
+els.metroSound.addEventListener('change', () => { applyMetroSound(els.metroSound.value, true); scheduleSave(); });
+els.metroVol.addEventListener('input', () => { applyMetroVolume((parseInt(els.metroVol.value, 10) || 0) / 100, true); scheduleSave(); });
 els.countIn.addEventListener('change', scheduleSave);
 els.metroHalf.addEventListener('click', () => { els.metroBpm.value = metro.setBpm(metro.bpm / 2); scheduleSave(); });
 els.metroDouble.addEventListener('click', () => { els.metroBpm.value = metro.setBpm(metro.bpm * 2); scheduleSave(); });
@@ -1560,23 +1611,138 @@ els.speedPresets.addEventListener('click', (e) => {
   applySpeed();
 });
 
+// --- Keyboard shortcuts ---
+// The combos live in shortcuts.js (also used for the help panel and the
+// tooltips); here each id is bound to its action. `enabled` reuses the
+// buttons' disabled state so there is a single source of truth.
+const SHORTCUT_ACTIONS = {
+  newProject: { run: () => newProject() },
+  openFile: { run: () => openFile() },
+  openProject: { run: () => openProject() },
+  saveProject: { run: () => saveProject(false), enabled: () => !els.saveProjectBtn.disabled },
+  saveProjectAs: { run: () => saveProject(true), enabled: () => !els.saveProjectAsBtn.disabled },
+  exportMp3: { run: () => exportMedia('mp3'), enabled: () => !els.exportMp3Btn.disabled },
+  exportMp4: { run: () => exportMedia('video'), enabled: () => !els.exportMp4Btn.disabled },
+
+  playPause: { run: () => togglePlay() },
+  seekBack: { run: () => { player.seek(player.currentTime - 5); render(); } },
+  seekFwd: { run: () => { player.seek(player.currentTime + 5); render(); } },
+  seekBack30: { run: () => { player.seek(player.currentTime - 30); render(); } },
+  seekFwd30: { run: () => { player.seek(player.currentTime + 30); render(); } },
+
+  loopA: { run: () => { loop.a = player.currentTime; if (loop.b != null && loop.b <= loop.a) loop.b = null; applyLoop(); } },
+  loopB: { run: () => { loop.b = player.currentTime; if (loop.a != null && loop.a >= loop.b) loop.a = null; applyLoop(); } },
+  loopToggle: { run: () => { loop.on = !loop.on; applyLoop(); } },
+  addMarker: { run: () => addMarker() },
+
+  pitchDown: { run: () => { state.semitones--; applyPitch(); } },
+  pitchUp: { run: () => { state.semitones++; applyPitch(); } },
+  speedDown: { run: () => { state.speedPct--; applySpeed(); } },
+  speedUp: { run: () => { state.speedPct++; applySpeed(); } },
+  resetSpeedPitch: { run: () => { state.speedPct = 100; applySpeed(); state.semitones = 0; state.fineCents = 0; applyPitch(); } },
+
+  metroToggle: {
+    run: async () => {
+      if (player.ctx.state === 'suspended') await player.ctx.resume();
+      metro.toggle();
+      updateMetroBtn();
+    }
+  },
+  metroBpmDown: { run: () => { els.metroBpm.value = metro.setBpm(metro.bpm - 1); scheduleSave(); } },
+  metroBpmUp: { run: () => { els.metroBpm.value = metro.setBpm(metro.bpm + 1); scheduleSave(); } },
+  metroTap: { run: () => { els.metroBpm.value = Math.round(metro.tap()); scheduleSave(); } },
+  metroVolDown: { run: () => { applyMetroVolume(metro.volume - 0.05, true); scheduleSave(); } },
+  metroVolUp: { run: () => { applyMetroVolume(metro.volume + 0.05, true); scheduleSave(); } },
+
+  help: { run: () => toggleShortcuts() }
+};
+
+function isTextField(el) {
+  if (!el) return false;
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable;
+}
+function modalOpen() {
+  return [els.dlModal, els.urlModal, els.busyOverlay].some((m) => m && m.style.display !== 'none');
+}
+
 window.addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
-  if (!player.loaded) return;
-  switch (e.code) {
-    case 'Space': e.preventDefault(); togglePlay(); break;
-    case 'KeyA': loop.a = player.currentTime; if (loop.b != null && loop.b <= loop.a) loop.b = null; applyLoop(); break;
-    case 'KeyB': loop.b = player.currentTime; if (loop.a != null && loop.a >= loop.b) loop.a = null; applyLoop(); break;
-    case 'KeyL': loop.on = !loop.on; applyLoop(); break;
-    case 'KeyM': addMarker(); break;
-    case 'ArrowLeft': player.seek(player.currentTime - 5); render(); break;
-    case 'ArrowRight': player.seek(player.currentTime + 5); render(); break;
-    case 'KeyZ': state.semitones--; applyPitch(); break;
-    case 'KeyX': state.semitones++; applyPitch(); break;
-    case 'Comma': state.speedPct--; applySpeed(); break;
-    case 'Period': state.speedPct++; applySpeed(); break;
+  // Modals bring their own capture-phase handlers; don't fire behind them.
+  if (modalOpen()) return;
+  const hit = matchShortcut(e);
+  // While the help panel is open only Esc and the help key itself do anything.
+  if (els.shortcutsOverlay.style.display !== 'none') {
+    if (e.key === 'Escape' || (hit && hit.entry.id === 'help')) { e.preventDefault(); toggleShortcuts(false); }
+    return;
   }
+  if (!hit) return;
+  // Bare keys must not steal typing; Ctrl/Alt combos still work in a field.
+  if (!hit.combo.ctrl && !hit.combo.alt && isTextField(e.target)) return;
+  const { entry } = hit;
+  if (entry.needsSong && !player.loaded) return;
+  const action = SHORTCUT_ACTIONS[entry.id];
+  if (!action || (action.enabled && !action.enabled())) return;
+  e.preventDefault();
+  action.run();
 });
+
+// --- Keyboard shortcuts help panel (built from the same table) ---
+function buildShortcutsHelp() {
+  const groups = [];
+  for (const s of SHORTCUTS) {
+    let g = groups.find((x) => x.name === s.group);
+    if (!g) { g = { name: s.group, rows: [] }; groups.push(g); }
+    g.rows.push(s);
+  }
+  els.shortcutsBody.innerHTML = '';
+  for (const g of groups) {
+    const box = document.createElement('div');
+    box.className = 'sc-group';
+    const title = document.createElement('div');
+    title.className = 'sc-group-title';
+    title.textContent = g.name;
+    box.appendChild(title);
+    for (const s of g.rows) {
+      const row = document.createElement('div');
+      row.className = 'sc-row';
+      const label = document.createElement('span');
+      label.textContent = s.label;
+      const keys = document.createElement('kbd');
+      keys.className = 'sc-keys';
+      keys.textContent = comboLabel(s);
+      row.append(label, keys);
+      box.appendChild(row);
+    }
+    els.shortcutsBody.appendChild(box);
+  }
+}
+
+function toggleShortcuts(on) {
+  const show = on != null ? on : els.shortcutsOverlay.style.display === 'none';
+  if (show && !els.shortcutsBody.childElementCount) buildShortcutsHelp();
+  els.shortcutsOverlay.style.display = show ? '' : 'none';
+}
+els.helpBtn.addEventListener('click', () => toggleShortcuts());
+els.shortcutsClose.addEventListener('click', () => toggleShortcuts(false));
+els.shortcutsOverlay.addEventListener('click', (e) => { if (e.target === els.shortcutsOverlay) toggleShortcuts(false); });
+
+// Quick-reference bar at the bottom.
+for (const item of footerItems()) {
+  const span = document.createElement('span');
+  const b = document.createElement('b');
+  b.textContent = item.keys;
+  span.append(b, ' ' + item.text);
+  els.shortcutsBar.appendChild(span);
+}
+
+// Append the combo to the tooltip of every button that has one, so the UI
+// cannot drift from the table.
+for (const s of SHORTCUTS) {
+  if (!s.btn) continue;
+  const el = els[s.btn];
+  if (!el) continue;
+  const base = el.title || s.label;
+  el.title = `${base} (${comboLabel(s)})`;
+}
 
 // --- Drag & drop: drop an audio/video file for a new project, or a .ppx to open it ---
 let dragDepth = 0;

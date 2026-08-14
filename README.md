@@ -43,7 +43,9 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
    - **Loop A/B**: imposta A e B, attiva *Loop* per ripetere una sezione.
    - **Marker**: aggiungi segnaposto e cliccali per saltare alle sezioni.
    - **Metronomo**: BPM con *TAP*, **metrica** selezionabile (2/4, 3/4, 4/4, 5/4, 6/8, 7/8 — con
-     accento sul primo battito) e *count-in* in battute prima del play (il click segue la velocità).
+     accento sul primo battito), *count-in* in battute prima del play, **6 timbri** del click
+     (Click, Beep, Legnetto, Cowbell, Rimshot, Clave) e **volume** dedicato. Il tempo è assoluto:
+     il click non segue la velocità del brano e il suo volume è indipendente da quello del player.
    - **Separa**: scegli il **Modello** dal menu e dividi il brano in stem; poi muto/solo/volume
      per ogni stem (es. muta la voce per il karaoke, o fai *solo* di uno strumento). Modelli:
      **6 stem** (voce/batteria/basso/chitarra/piano/altro — veloce), **4 stem alta qualità**
@@ -69,8 +71,21 @@ Scarica dalla pagina **[Releases](https://github.com/gianmarcobonan/practice-pla
   senza doverli riseparare. (Per un progetto video, il `.ppx` contiene già anche il video.)
 
 ### Scorciatoie
-`Spazio` play/pausa · `Z`/`X` tonalità −/+ · `,`/`.` velocità −/+ · `A`/`B` loop in/out ·
-`L` loop on/off · `M` marker · `←`/`→` ±5s
+Premi `F1` o `?` nell'app per l'elenco completo.
+
+| | |
+|---|---|
+| `Spazio` | play/pausa |
+| `←`/`→` · `Ctrl+←`/`Ctrl+→` | ±5 s · ±30 s |
+| `Z`/`X` · `,`/`.` | tonalità −/+ · velocità −/+ |
+| `Ctrl+0` | ripristina velocità e tonalità |
+| `A`/`B` · `L` | loop in/out · loop on/off |
+| `M` | marker |
+| `Ctrl+M` · `Ctrl+T` | metronomo on/off · tap tempo |
+| `Ctrl+↑`/`Ctrl+↓` | BPM +/− (con `Shift`: volume del click) |
+| `Ctrl+N` · `Ctrl+O` · `Ctrl+Shift+O` | nuovo · apri brano · apri progetto |
+| `Ctrl+S` · `Ctrl+Shift+S` | salva progetto · salva con nome |
+| `Ctrl+E` · `Ctrl+Shift+E` | esporta MP3 · esporta MP4 |
 
 ## Note
 - I progetti `.ppx` si aprono con **doppio click**: l'installer Windows registra l'estensione

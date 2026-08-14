@@ -1,4 +1,5 @@
 import { clamp } from './util.js';
+import { DEFAULT_SOUND, isMetroSound, renderClick } from './metro-sounds.js';
 
 // Web Audio metronome with look-ahead scheduling, tap tempo and count-in.
 // Beats scale with playback speed (getSpeed) so clicks stay aligned with the
@@ -11,7 +12,8 @@ export class Metronome {
     this.bpm = 120;
     this.beatsPerBar = 4;
     this.on = false;
-    this.volume = 0.4;
+    this.volume = 0.5;   // with the preset trims this matches the old fixed level
+    this.sound = DEFAULT_SOUND;
     this._next = 0;
     this._beat = 0;
     this._timer = null;
@@ -26,6 +28,13 @@ export class Metronome {
   }
 
   setBpm(b) { this.bpm = clamp(Math.round(b), 30, 300); return this.bpm; }
+
+  // Click timbre (see metro-sounds.js); unknown ids fall back to the default.
+  setSound(id) { this.sound = isMetroSound(id) ? id : DEFAULT_SOUND; return this.sound; }
+
+  // Click level, 0..1. Independent from the song volume: the click bypasses
+  // the player's gain/EQ chain and goes straight to the output.
+  setVolume(v) { this.volume = clamp(v, 0, 1); return this.volume; }
 
   // Beats per bar = numerator of the time signature (accent on beat 1).
   setBeatsPerBar(n) { this.beatsPerBar = clamp(Math.round(n), 1, 12); this._beat = 0; return this.beatsPerBar; }
@@ -51,15 +60,7 @@ export class Metronome {
   _interval() { return (60 / this.bpm) / (this.getSpeed() || 1); }
 
   _click(t, accent) {
-    const o = this.ctx.createOscillator();
-    const g = this.ctx.createGain();
-    o.frequency.value = accent ? 1600 : 1000;
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(this.volume, t + 0.001);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-    o.connect(g).connect(this.dest);
-    o.start(t);
-    o.stop(t + 0.06);
+    renderClick(this.ctx, this.sound, t, accent, this.volume, this.dest);
     if (this.onClick) this.onClick(t, accent);
   }
 
